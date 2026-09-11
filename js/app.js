@@ -49,13 +49,14 @@ const setT = (n, x, y, s = 1, r = 0) => n.setAttribute('transform', `translate($
 const setO = (n, o) => { n.setAttribute('opacity', clamp(o).toFixed(3)); n.style.display = o <= 0.001 ? 'none' : ''; };
 
 /* ---------- hand-drawn primitives ---------- */
-const PEN = { stroke: C.gray, 'stroke-width': 1.3, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.8 };
-const LINE = { ...PEN, stroke: C.teal, opacity: 0.85 };
+const PEN = { stroke: C.gray, 'stroke-width': 1, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.7 };
+const JITTER = 0.55; // minimal theme: calmer hand-drawn wobble
+const LINE = { ...PEN, stroke: C.teal, opacity: 0.8 };
 
 // wobbly polyline through points (2 segments per edge, jittered)
 function roughPoly(pts, seed, closed = true, amt = 1.2) {
   const r = rng(seed);
-  const j = () => (r() - 0.5) * 2 * amt;
+  const j = () => (r() - 0.5) * 2 * amt * JITTER;
   let d = '';
   const n = pts.length;
   for (let i = 0; i < (closed ? n : n - 1); i++) {
@@ -71,7 +72,7 @@ function roughCircle(cx, cy, r, seed) {
   const rr = rng(seed); let d = '';
   const n = 8;
   for (let i = 0; i <= n; i++) {
-    const a = (i / n) * Math.PI * 2, rad = r * (1 + (rr() - 0.5) * 0.08);
+    const a = (i / n) * Math.PI * 2, rad = r * (1 + (rr() - 0.5) * 0.08 * JITTER);
     const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
     d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
   }
@@ -87,7 +88,7 @@ function curve(x1, y1, x2, y2, k = 0.25) {
 function textured(parent, d, color, seed, opts = {}) {
   const g = el('g', {}, parent);
   el('path', { d, fill: color, opacity: opts.fillOpacity ?? 0.82 }, g);
-  el('path', { d, fill: 'url(#hatch)', opacity: 0.55 }, g);
+  el('path', { d, fill: 'url(#hatch)', opacity: 0.2 }, g);
   if (opts.outline) el('path', { d, ...PEN, 'stroke-width': opts.sw ?? 1.2 }, g);
   return g;
 }
@@ -111,7 +112,6 @@ function person(parent, color, seed, size = 1) {
 function paper(parent, w, h, seed, lines = 3) {
   const g = el('g', {}, parent);
   el('path', { d: roughRect(0, 0, w, h, seed, 0.8), fill: C.paper, ...PEN, opacity: 1 }, g);
-  el('path', { d: roughRect(0, 0, w, h, seed, 0.8), fill: 'url(#hatch)', opacity: 0.25 }, g);
   const c = Math.min(w, h) * 0.22;
   el('path', { d: `M${w - c} 0 L${w - c} ${c} L${w} ${c}`, ...PEN }, g);
   const r = rng(seed + 5);
@@ -317,7 +317,7 @@ function buildScene(svg, L) {
 
   const defs = el('defs', {}, svg);
   const pat = el('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' }, defs);
-  el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: C.text, 'stroke-width': 0.7, opacity: 0.16 }, pat);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: C.text, 'stroke-width': 0.6, opacity: 0.08 }, pat);
   const marker = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
   el('path', { d: 'M1 1 L9 5 L1 9', fill: 'none', stroke: C.teal, 'stroke-width': 1.3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, marker);
 
@@ -329,7 +329,6 @@ function buildScene(svg, L) {
   function buildApp(parent) {
     const g = el('g', {}, parent);
     el('path', { d: roughRect(0, 0, APP_W, APP_H, 21, 1.1), fill: C.paper, ...PEN, opacity: 1 }, g);
-    el('path', { d: roughRect(0, 0, APP_W, APP_H, 21, 1.1), fill: 'url(#hatch)', opacity: 0.25 }, g);
     el('path', { d: `M1 27 L${APP_W - 1} 27.5`, ...PEN, 'stroke-width': 1 }, g);
     [12, 22, 32].forEach((x, i) => el('circle', { cx: x, cy: 14, r: 3, fill: [C.terracotta, C.gold, C.sage][i], opacity: 0.8 }, g));
     T(g, 46, 18.5, 'Sales Command Center', { 'font-size': 11.5, 'font-weight': 600, fill: C.text2 });
@@ -381,7 +380,6 @@ function buildScene(svg, L) {
   {
     const g = S.shakti;
     el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), fill: C.paleTeal, opacity: 0.9 }, g);
-    el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), fill: 'url(#hatch)', opacity: 0.35 }, g);
     el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), ...PEN, 'stroke-width': 1.2, opacity: 0.45 }, g);
     const sq = [[-24, -24, C.teal], [4, -24, C.sage], [-24, 4, C.terracotta], [4, 4, C.gold]];
     sq.forEach(([x, y, c], i) => textured(g, roughRect(x, y, 20, 20, 61 + i, 0.7), c, 70 + i, { fillOpacity: 0.75, sw: 0.9 }));
@@ -507,7 +505,6 @@ function buildScene(svg, L) {
     const g = el('g', {}, layers.front);
     const inner = el('g', { transform: `translate(${-PW / 2} ${-PH / 2})` }, g);
     el('path', { d: roughRect(0, 0, PW, PH, seed, 1), fill: C.paper, ...PEN, opacity: 1 }, inner);
-    el('path', { d: roughRect(0, 0, PW, PH, seed, 1), fill: 'url(#hatch)', opacity: 0.2 }, inner);
     el('path', { d: `M${PW - 40} 0 L${PW - 40} 40 L${PW} 40`, ...PEN }, inner);
     const content = el('g', {}, inner);
     T(content, 22, 40, 'SESSION DATA · ' + num, { class: 'ink-label', 'font-size': 11 });
@@ -563,10 +560,9 @@ function buildScene(svg, L) {
   {
     const R = L.report, g = S.report;
     S.reportOutline = el('path', { d: roughRect(R.x, R.y, R.w, R.h, 900, 1.2), fill: C.paper, ...PEN, 'stroke-width': 1.4, opacity: 1 }, g);
-    el('path', { d: roughRect(R.x, R.y, R.w, R.h, 900, 1.2), fill: 'url(#hatch)', opacity: 0.18 }, g);
     S.reportText = el('g', {}, g);
     T(S.reportText, R.x + 24, R.y + 34, 'ILLUSTRATIVE REPORT', { class: 'ink-label', 'font-size': 11 });
-    T(S.reportText, R.x + 24, R.y + 64, 'Experience report', { 'font-size': 20, 'font-weight': 600 });
+    T(S.reportText, R.x + 24, R.y + 64, 'Experience report', { 'font-size': 20, 'font-weight': 500 });
     T(S.reportText, R.x + 24, R.y + 86, 'Sales Command Center', { 'font-size': 13.5, fill: C.text2 });
     S.reportReady = el('g', {}, g);
     el('path', { d: roughCircle(R.x + 34, R.y + R.h - 34, 9, 901), fill: C.sage, opacity: 0.85 }, S.reportReady);
