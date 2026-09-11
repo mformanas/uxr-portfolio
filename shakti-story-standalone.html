@@ -1077,8 +1077,17 @@ function makeRenderer(S, L, ctx) {
     [7.55, { x, y, s: 1, o: 1 }], [7.75, { x: L.shakti4.x, y: L.shakti4.y, s: 0.15, o: 0 }]
   ]));
   const qy = j => L.queue.y0 + j * L.queue.dy;
+  // 10→11: 48 cohort members (8 per colour) travel to the scales and become the marks
+  const morphTarget = new Array(S.cohort.length).fill(-1);
+  {
+    const used = [0, 0, 0, 0, 0, 0];
+    S.cohort.forEach((p, i) => {
+      const ui = (i * 7 + S.cohortPos[i].row) % 6; // same colour rule as the cohort
+      if (used[ui] < 8) { morphTarget[i] = ui * 8 + used[ui]; used[ui]++; }
+    });
+  }
   const markT = S.marks.map(m => track([
-    [10.7 + m.di * 0.03, { x: m.x, y: m.y, s: 0, o: 0 }], [10.95 + m.di * 0.03, { s: 1, o: 1 }],
+    [10.86, { x: m.x, y: m.y, s: 1, o: 0 }], [10.96, { o: 1 }],
     [11.55, { x: m.x, y: m.y, s: 1 }], [11.95, { x: L.queue.x, y: qy(m.ui), s: 0.25 }], [11.86, { o: 1 }], [11.98, { o: 0 }]
   ]));
   const pcEarly = { x: (L.pages[0][0] + L.pages[1][0]) / 2, y: L.pages[0][1] };
@@ -1157,18 +1166,26 @@ function makeRenderer(S, L, ctx) {
 
     /* --- cohort --- */
     const inA = new Set(GLIMPSE_A.map(x => x.idx)), inB = new Set(GLIMPSE_B.map(x => x.idx));
-    const dimAll = seg(g, 8.55, 8.85), dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.8);
+    const dimAll = seg(g, 8.55, 8.85), dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.78);
+    const morphT = seg(g, 10.55, 10.92), morphOut = seg(g, 10.9, 10.97), morphIn = seg(g, 10.55, 10.75);
     const SQ = [[-14, -14], [14, -14], [-14, 14], [14, 14]]; // the four small squares of the Shakti mark
     S.cohort.forEach((p, i) => {
       const P = S.cohortPos[i];
       const e = seg(g, 8.0 + P.delay * 2.5, 8.4 + P.delay * 2.5, easeOut);
       const sq = SQ[(P.col < L.grid.cols / 2 ? 0 : 1) + (P.row < L.grid.rows / 2 ? 0 : 2)];
       const ox = sh.x + sq[0] * sh.s, oy = sh.y + sq[1] * sh.s;
-      let o = e * (1 - gone);
+      let o = e;
       if (inA.has(i)) o *= lerp(1, 0.07, dimA);
       else if (inB.has(i)) o *= g < 9.62 ? lerp(1, 0.07, dimAll) : lerp(0.07, 1, riseB);
       else o *= lerp(1, 0.07, dimAll);
-      setT(p, lerp(ox, P.x, e), lerp(oy, P.y, e), lerp(0.25, P.s, e), P.rot); setO(p, o);
+      let x = lerp(ox, P.x, e), y = lerp(oy, P.y, e), sc = lerp(0.25, P.s, e);
+      const mt = morphTarget[i];
+      if (mt >= 0 && g > 10.5) { // this person morphs into a scale mark
+        const m = S.marks[mt];
+        x = lerp(x, m.x, morphT); y = lerp(y, m.y, morphT); sc = lerp(sc, 0.3, morphT);
+        o = lerp(o, 0.9, morphIn) * (1 - morphOut);
+      } else o *= 1 - gone;
+      setT(p, x, y, sc, P.rot * (1 - morphT)); setO(p, o);
     });
     S.glimpseA.forEach(gg => setO(gg, seg(g, 8.8, 9.0) * (1 - seg(g, 9.55, 9.72))));
     S.glimpseB.forEach(gg => setO(gg, seg(g, 9.85, 10.05) * (1 - seg(g, 10.55, 10.7))));
