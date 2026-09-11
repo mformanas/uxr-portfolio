@@ -720,7 +720,7 @@ const HEADINGS = [
   [6.55, 'The environment', 'Select the environment variables'],
   [7.5, 'Bring the inputs together', 'Shakti absorbs the three inputs'],
   [7.95, 'The synthetic cohort', 'Shakti creates whole spectrum of synthetic users'],
-  [8.55, 'A glimpse of behaviour', 'Different ways to begin the same task'],
+  [8.95, 'A glimpse of behaviour', 'Different ways to begin the same task'],
   [9.55, 'Another glimpse', 'Different attention. Different patience.'],
   [10.55, 'Personality dimensions', 'Eight dimensions. Many ways to be human.'],
   [11.55, 'Synthetic testing in action', 'Synthetic users interacts with the agentic app'],
@@ -1006,11 +1006,9 @@ function buildScene(svg, L) {
   S.glass = el('g', {}, layers.front);
   {
     const g = S.glass;
-    el('path', { d: roughCircle(0, 0, 40, 800), fill: C.paleTeal, opacity: 0.6 }, g);
-    el('path', { d: roughCircle(0, 0, 40, 800), ...PEN, stroke: C.teal, 'stroke-width': 3.2, opacity: 0.95 }, g);
-    el('path', { d: roughCircle(0, 0, 33, 801), ...PEN, stroke: C.teal, 'stroke-width': 1, opacity: 0.6 }, g);
-    el('path', { d: 'M29 29 L58 58', stroke: C.teal, 'stroke-width': 7, 'stroke-linecap': 'round' }, g);
-    el('path', { d: 'M-16 -10 Q-6 -24 8 -20', ...PEN, stroke: C.paper, 'stroke-width': 2, opacity: 0.9 }, g);
+    el('circle', { cx: 0, cy: 0, r: 38, fill: C.paleTeal, opacity: 0.35 }, g);
+    el('circle', { cx: 0, cy: 0, r: 38, fill: 'none', stroke: C.teal, 'stroke-width': 2, opacity: 0.9 }, g);
+    el('path', { d: 'M28 28 L52 52', stroke: C.teal, 'stroke-width': 3.5, 'stroke-linecap': 'round', opacity: 0.9 }, g);
     T(g, 0, 78, 'Evaluate', { 'font-size': 14, 'font-weight': 600, 'text-anchor': 'middle' });
     ['Task outcome', 'Interaction experience', 'AI responses'].forEach((s, i) => {
       el('circle', { cx: -58, cy: 96 + i * 19 - 4, r: 2.6, fill: C.teal }, g);
@@ -1166,7 +1164,7 @@ function makeRenderer(S, L, ctx) {
 
     /* --- cohort --- */
     const inA = new Set(GLIMPSE_A.map(x => x.idx)), inB = new Set(GLIMPSE_B.map(x => x.idx));
-    const dimAll = seg(g, 8.55, 8.85), dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.78);
+    const dimAll = seg(g, 9.0, 9.25), dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.78);
     const morphT = seg(g, 10.55, 10.92), morphOut = seg(g, 10.9, 10.97), morphIn = seg(g, 10.55, 10.75);
     const SQ = [[-14, -14], [14, -14], [-14, 14], [14, 14]]; // the four small squares of the Shakti mark
     S.cohort.forEach((p, i) => {
@@ -1187,7 +1185,7 @@ function makeRenderer(S, L, ctx) {
       } else o *= 1 - gone;
       setT(p, x, y, sc, P.rot * (1 - morphT)); setO(p, o);
     });
-    S.glimpseA.forEach(gg => setO(gg, seg(g, 8.8, 9.0) * (1 - seg(g, 9.55, 9.72))));
+    S.glimpseA.forEach(gg => setO(gg, seg(g, 9.18, 9.35) * (1 - seg(g, 9.55, 9.72))));
     S.glimpseB.forEach(gg => setO(gg, seg(g, 9.85, 10.05) * (1 - seg(g, 10.55, 10.7))));
 
     /* --- scales & marks --- */
