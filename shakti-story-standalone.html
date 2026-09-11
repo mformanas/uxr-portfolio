@@ -792,6 +792,16 @@ function buildScene(svg, L) {
   const defs = el('defs', {}, svg);
   const pat = el('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' }, defs);
   el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: C.text, 'stroke-width': 0.6, opacity: 0.08 }, pat);
+  // "watercolour wash": pigment spreads (displacement) and softens (blur) as a figure dissolves
+  const WASH_STEPS = 10;
+  for (let i = 0; i < WASH_STEPS; i++) {
+    const t = i / (WASH_STEPS - 1);
+    const f = el('filter', { id: 'wash-' + i, x: '-60%', y: '-60%', width: '220%', height: '220%' }, defs);
+    el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.09, numOctaves: 2, seed: 3, result: 'n' }, f);
+    el('feDisplacementMap', { in: 'SourceGraphic', in2: 'n', scale: (t * 26).toFixed(1), xChannelSelector: 'R', yChannelSelector: 'G', result: 'd' }, f);
+    el('feGaussianBlur', { in: 'd', stdDeviation: (t * 2.2).toFixed(2) }, f);
+  }
+  S.WASH_STEPS = WASH_STEPS;
   const marker = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
   el('path', { d: 'M1 1 L9 5 L1 9', fill: 'none', stroke: C.teal, 'stroke-width': 1.3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, marker);
 
@@ -1164,7 +1174,7 @@ function makeRenderer(S, L, ctx) {
 
     /* --- cohort --- */
     const inA = new Set(GLIMPSE_A.map(x => x.idx)), inB = new Set(GLIMPSE_B.map(x => x.idx));
-    const dimAll = seg(g, 9.0, 9.25), dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.78);
+    const WASH_STEPS = S.WASH_STEPS, dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.78);
     const morphT = seg(g, 10.55, 10.92), morphOut = seg(g, 10.9, 10.97), morphIn = seg(g, 10.55, 10.75);
     const SQ = [[-14, -14], [14, -14], [-14, 14], [14, 14]]; // the four small squares of the Shakti mark
     S.cohort.forEach((p, i) => {
@@ -1172,11 +1182,15 @@ function makeRenderer(S, L, ctx) {
       const e = seg(g, 8.0 + P.delay * 2.5, 8.4 + P.delay * 2.5, easeOut);
       const sq = SQ[(P.col < L.grid.cols / 2 ? 0 : 1) + (P.row < L.grid.rows / 2 ? 0 : 2)];
       const ox = sh.x + sq[0] * sh.s, oy = sh.y + sq[1] * sh.s;
-      let o = e;
+      let o = e, wash = 0;
+      // 8→9: everyone except the four retained people washes away, staggered like spreading water
+      const dP = seg(g, 9.0 + P.delay * 1.5, 9.22 + P.delay * 1.5);
       if (inA.has(i)) o *= lerp(1, 0.07, dimA);
-      else if (inB.has(i)) o *= g < 9.62 ? lerp(1, 0.07, dimAll) : lerp(0.07, 1, riseB);
-      else o *= lerp(1, 0.07, dimAll);
-      let x = lerp(ox, P.x, e), y = lerp(oy, P.y, e), sc = lerp(0.25, P.s, e);
+      else if (inB.has(i)) { if (g < 9.62) { o *= lerp(1, 0.07, dP); wash = dP; } else o *= lerp(0.07, 1, riseB); }
+      else { o *= lerp(1, 0.07, dP); wash = dP; }
+      const washing = wash > 0.02 && wash < 0.98;
+      p.setAttribute('filter', washing ? `url(#wash-${Math.round(wash * (WASH_STEPS - 1))})` : 'none');
+      let x = lerp(ox, P.x, e), y = lerp(oy, P.y, e), sc = lerp(0.25, P.s, e) * (1 + 0.22 * Math.sin(Math.PI * wash));
       const mt = morphTarget[i];
       if (mt >= 0 && g > 10.5) { // this person morphs into a scale mark
         const m = S.marks[mt];
