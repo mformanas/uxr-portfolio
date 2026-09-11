@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ready for people? — A Shakti story</title>
+<meta name="description" content="How a product manager uses Shakti, synthetic user orchestration, to explore the human experience of an agentic Sales Command Center app before launch.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- Faint abstract background: broad curved bands and fine contour lines -->
+<div class="bg" aria-hidden="true">
+  <svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+    <g class="bg-bands">
+      <path d="M-100 240 C 300 120, 600 380, 900 260 S 1500 80, 1750 220 L 1750 420 C 1400 300, 1100 520, 800 420 S 200 300, -100 440 Z"/>
+      <path d="M-100 640 C 250 520, 550 760, 850 660 S 1450 500, 1750 640 L 1750 820 C 1400 720, 1050 900, 750 820 S 200 700, -100 860 Z"/>
+    </g>
+    <g class="bg-contours">
+      <path d="M-100 150 C 300 40, 600 300, 900 180 S 1500 0, 1750 140"/>
+      <path d="M-100 180 C 300 70, 600 330, 900 210 S 1500 30, 1750 170"/>
+      <path d="M-100 210 C 300 100, 600 360, 900 240 S 1500 60, 1750 200"/>
+      <path d="M-100 470 C 350 350, 650 570, 950 470 S 1450 340, 1750 480"/>
+      <path d="M-100 500 C 350 380, 650 600, 950 500 S 1450 370, 1750 510"/>
+      <path d="M-100 530 C 350 410, 650 630, 950 530 S 1450 400, 1750 540"/>
+      <path d="M-100 900 C 250 780, 550 1000, 850 900 S 1450 760, 1750 900"/>
+      <path d="M-100 930 C 250 810, 550 1030, 850 930 S 1450 790, 1750 930"/>
+      <path d="M-100 960 C 250 840, 550 1060, 850 960 S 1450 820, 1750 960"/>
+    </g>
+  </svg>
+</div>
+
+<div class="progress" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+
+<a class="skip-link" href="#story">Skip to the story</a>
+
+<header class="brand">
+  <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+  <span class="brand-name">shakti.</span>
+  <span class="brand-tag">Synthetic user orchestration.</span>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-art" id="heroArt">
+      <svg id="heroSvg" viewBox="0 0 520 440" role="img" aria-labelledby="heroSvgTitle">
+        <title id="heroSvgTitle">A small Sales Command Center app connected by curved pencil lines to about twenty small people.</title>
+      </svg>
+    </div>
+    <div class="hero-copy">
+      <h1 id="hero-title">Your app is ready.<br>But is it ready<br>for <em>people?</em></h1>
+      <p>The workflows work. The functionality checks out. The AI gets its data from the right sources.</p>
+      <p>Before shipping Sales Command Center, its product manager has one more thing to explore: how different people will actually use it.</p>
+    </div>
+  </section>
+
+  <section class="story" id="story" aria-label="The story">
+    <div class="stage-col">
+      <div class="stage" id="stage">
+        <div class="stage-heading" id="stageHeading" aria-live="polite">
+          <span class="stage-label" id="stageLabel"></span>
+          <span class="stage-title" id="stageTitle"></span>
+        </div>
+        <svg id="stageSvg" viewBox="0 0 1000 700" role="img" aria-labelledby="stageDesc">
+          <desc id="stageDesc">Illustration of the current chapter.</desc>
+        </svg>
+
+        <!-- Environment panel: a working, transparent panel with pencil-style labels -->
+        <div class="env-panel" id="envPanel" aria-hidden="true">
+          <form id="envForm" class="env-form" aria-label="Choose an example test environment">
+            <p class="env-title">Choose an example test environment</p>
+            <fieldset class="chips">
+              <legend>Interaction</legend>
+              <label class="chip"><input type="radio" name="interaction" value="Conversation only"><span>Conversation only</span></label>
+              <label class="chip"><input type="radio" name="interaction" value="Clickable elements"><span>Clickable elements</span></label>
+              <label class="chip"><input type="radio" name="interaction" value="Both" checked><span>Both</span></label>
+            </fieldset>
+            <fieldset class="chips">
+              <legend>Accessibility</legend>
+              <label class="chip"><input type="checkbox" name="a11y" value="Keyboard only"><span>Keyboard only</span></label>
+              <label class="chip"><input type="checkbox" name="a11y" value="Screen reader"><span>Screen reader</span></label>
+              <label class="chip"><input type="checkbox" name="a11y" value="200% zoom"><span>200% zoom</span></label>
+              <label class="chip"><input type="checkbox" name="a11y" value="High contrast"><span>High contrast</span></label>
+            </fieldset>
+            <fieldset class="chips">
+              <legend>Device + viewport</legend>
+              <label class="chip"><input type="radio" name="device" value="Desktop" checked><span>Desktop</span></label>
+              <label class="chip"><input type="radio" name="device" value="Mobile"><span>Mobile</span></label>
+              <label class="env-select"><span>Viewport</span><select name="viewport" id="viewportSelect"></select></label>
+            </fieldset>
+            <div class="env-device">
+              <svg id="deviceSketch" viewBox="0 0 120 90" aria-hidden="true"></svg>
+              <p class="env-summary" id="envSummary" aria-live="polite"></p>
+            </div>
+            <p class="env-note">These choices describe the simulated environment. They do not change this page.</p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="steps" id="steps">
+      <div class="step" data-chapter="1">
+        <article class="card" id="ch-1">
+          <p class="chapter-label">01 — The starting point</p>
+          <h2>Every check is green.</h2>
+          <p>The product manager is ready to ship Sales Command Center, an agentic app for sales teams.</p>
+          <p>She has already tested its agentic workflows, functionality, and the sources behind its AI outputs. Everything is working well.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="2">
+        <article class="card" id="ch-2">
+          <p class="chapter-label">02 — The unanswered question</p>
+          <h2>“How may it feel to use?”</h2>
+          <p>She wants to feel confident about the end user experience before customers get their hands on it.</p>
+          <p>Will people understand the AI output? Will they trust a recommendation? What happens when they need more context, or have very little patience?</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="3">
+        <article class="card" id="ch-3">
+          <p class="chapter-label">03 — Meet Shakti</p>
+          <h2>A way to simulate human variation</h2>
+          <p>She turns to Shakti: Synthetic Human Agent for Knowledge, Testing and Insight.</p>
+          <p>Shakti orchestrates synthetic users to explore a variety of human behaviours at scale.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="4">
+        <article class="card" id="ch-4">
+          <p class="chapter-label">04 — Set the context</p>
+          <h2>Three inputs. A shared starting point.</h2>
+          <p>Shakti takes the three inputs, a user role, a business outcome, and the environment in which people will use the app.</p>
+          <p>These inputs set the context for every synthetic user in the study.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="5">
+        <article class="card" id="ch-5">
+          <p class="chapter-label">05 — Write in the role</p>
+          <h2>Start with the user role.</h2>
+          <p>She provides the user role as Sales Representative to Shakti</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="6">
+        <article class="card" id="ch-6">
+          <p class="chapter-label">06 — Write in the shared purpose</p>
+          <h2>Business outcome</h2>
+          <p>For this, she provides what a sales rep would care about, identify and prioritize important opportunities, with the information they need to decide where to focus.</p>
+        </article>
+      </div>
+      <div class="step step-env" data-chapter="7">
+        <div class="step-inner">
+          <article class="card" id="ch-7">
+            <p class="chapter-label">07 — Set the conditions</p>
+            <h2>Environmental variables</h2>
+            <p>She gives Shakti the environmental variables to explore: how people interact, their accessibility needs, and the device or viewport they use.</p>
+          </article>
+          <div class="env-slot" id="envSlotMobile"></div>
+        </div>
+      </div>
+      <div class="step" data-chapter="8">
+        <article class="card" id="ch-8">
+          <p class="chapter-label">08 — Create the people</p>
+          <h2>Shakti at work</h2>
+          <p>With those inputs, Shakti creates a cohort of synthetic users with varied personality profiles.</p>
+          <p>They share a job role and business goal. But each brings a different way of communicating, consuming information, building trust, and responding to friction.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="9">
+        <article class="card" id="ch-9">
+          <p class="chapter-label">09 — A glimpse of behaviour</p>
+          <h2>Listen to how they begin.</h2>
+          <p>A few sales reps come into focus. One asks for a short answer; another explains the full situation.</p>
+          <p>One wants to inspect the evidence. Another is ready to act on the recommendation.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="10">
+        <article class="card" id="ch-10">
+          <p class="chapter-label">10 — Another glimpse</p>
+          <h2>Now, meet a different group.</h2>
+          <p>As the first group fades, other sales reps come into view.</p>
+          <p>Some read the details; others skim. Some work through an incomplete answer; others quickly lose patience.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="11">
+        <article class="card" id="ch-11">
+          <p class="chapter-label">11 — Add human variation</p>
+          <h2>Eight dimensions. Many combinations.</h2>
+          <p>A shared role does not mean a shared approach. Communication, decisions, risk, trust, and control all vary from person to person.</p>
+          <p>So do AI literacy, information consumption, and frustration tolerance. Shakti combines these eight dimensions to create varied synthetic users.</p>
+        </article>
+      </div>
+      <div class="step step-tall" data-chapter="12">
+        <article class="card" id="ch-12">
+          <p class="chapter-label">12 — Let each person try</p>
+          <h2>Synthetic testing in action.</h2>
+          <p>Each synthetic user combines all eight dimensions and takes a turn with Sales Command Center.</p>
+          <p>Based on the requirement Shakti creates n synthetic users to test the agentic app by attempting to complete the business outcome. Each interactions remains in a sandbox so that there is no context sharing to avoid any biases.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="13">
+        <article class="card" id="ch-13">
+          <p class="chapter-label">13 — Capture the evidence</p>
+          <h2>Every session leaves a record.</h2>
+          <p>All the interaction, friction, goal completion data, interaction with AI and transcripts get recorded.</p>
+          <p>Each record stays connected to the synthetic user and the environment they used.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="14">
+        <article class="card" id="ch-14">
+          <p class="chapter-label">14 — Evaluate the experience</p>
+          <h2>Evaluation of the session records</h2>
+          <p>Shakti then uses various evaluation skills to go through the collected data and identify any issues related to the content, accessibility and experience.</p>
+        </article>
+      </div>
+      <div class="step" data-chapter="15">
+        <article class="card" id="ch-15">
+          <p class="chapter-label">15 — Bring it back to the PM</p>
+          <h2>A report she can act on.</h2>
+          <p>The product manager receives a report with prioritized issues, supporting evidence, affected user profiles, and conversation transcripts.</p>
+          <p>She can see what to improve, what to test again, and how to make the experience ready for customers.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="dots" id="dots" aria-label="Chapters"></nav>
+
+<script src="js/app.js"></script>
+</body>
+</html>

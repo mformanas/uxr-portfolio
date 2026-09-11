@@ -1,0 +1,1028 @@
+/* Ready for people? — A Shakti story
+   Scroll-driven, hand-drawn SVG storytelling. All artwork is generated locally.
+   Global scroll position g ∈ [1, 16): chapter n is "settled" for g ∈ [n, n+0.5],
+   transitions to n+1 happen for g ∈ [n+0.55, n+0.95]. Every visual is a pure
+   function of g, so scrolling up reverses naturally. */
+(() => {
+'use strict';
+
+const NS = 'http://www.w3.org/2000/svg';
+const C = {
+  text: '#161513', text2: '#5C5651', border: '#D6D1CC', focus: '#00688C', red: '#C74634',
+  teal: '#789895', sage: '#80906F', terracotta: '#B87863', plum: '#765D78', gold: '#D9AB63', gray: '#8B919C',
+  pencil: '#8B919C', paper: '#FFFEFD', paleTeal: '#E4ECEA'
+};
+const PALETTE = [C.teal, C.sage, C.terracotta, C.plum, C.gold, C.gray];
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- tiny utilities ---------- */
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => t * t * (3 - 2 * t);
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+// eased progress of g through [a,b]
+const seg = (g, a, b, ease = smooth) => ease(clamp((g - a) / (b - a)));
+const lin = (g, a, b) => clamp((g - a) / (b - a));
+
+function rng(seed) { // mulberry32 — deterministic variation
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) {
+    if (attrs[k] == null) continue;
+    if (k === 'text') n.textContent = attrs[k];
+    else n.setAttribute(k, attrs[k]);
+  }
+  if (parent) parent.appendChild(n);
+  return n;
+}
+const setT = (n, x, y, s = 1, r = 0) => n.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${r.toFixed(2)}) scale(${s.toFixed(4)})`);
+const setO = (n, o) => { n.setAttribute('opacity', clamp(o).toFixed(3)); n.style.display = o <= 0.001 ? 'none' : ''; };
+
+/* ---------- hand-drawn primitives ---------- */
+const PEN = { stroke: C.gray, 'stroke-width': 1.3, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.8 };
+const LINE = { ...PEN, stroke: C.teal, opacity: 0.85 };
+
+// wobbly polyline through points (2 segments per edge, jittered)
+function roughPoly(pts, seed, closed = true, amt = 1.2) {
+  const r = rng(seed);
+  const j = () => (r() - 0.5) * 2 * amt;
+  let d = '';
+  const n = pts.length;
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    const mx = (a[0] + b[0]) / 2 + j(), my = (a[1] + b[1]) / 2 + j();
+    if (i === 0) d += `M${(a[0] + j()).toFixed(1)} ${(a[1] + j()).toFixed(1)} `;
+    d += `Q${mx.toFixed(1)} ${my.toFixed(1)} ${(b[0] + j()).toFixed(1)} ${(b[1] + j()).toFixed(1)} `;
+  }
+  return d + (closed ? 'Z' : '');
+}
+const roughRect = (x, y, w, h, seed, amt) => roughPoly([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], seed, true, amt);
+function roughCircle(cx, cy, r, seed) {
+  const rr = rng(seed); let d = '';
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2, rad = r * (1 + (rr() - 0.5) * 0.08);
+    const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
+    d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+  }
+  return d + 'Z';
+}
+// curved connector between two points, bowing by k
+function curve(x1, y1, x2, y2, k = 0.25) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1;
+  const cx = mx - dy * k, cy = my + dx * k;
+  return `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+}
+// lightly textured fill: colour + hatch overlay + pencil outline
+function textured(parent, d, color, seed, opts = {}) {
+  const g = el('g', {}, parent);
+  el('path', { d, fill: color, opacity: opts.fillOpacity ?? 0.82 }, g);
+  el('path', { d, fill: 'url(#hatch)', opacity: 0.55 }, g);
+  if (opts.outline) el('path', { d, ...PEN, 'stroke-width': opts.sw ?? 1.2 }, g);
+  return g;
+}
+// small abstract human: rounded head + shoulder-and-torso silhouette. Local origin at torso centre.
+function person(parent, color, seed, size = 1) {
+  const r = rng(seed);
+  const g = el('g', {}, parent);
+  const inner = el('g', { transform: `scale(${size})` }, g);
+  const sh = 9 + r() * 2, w = 11 + r() * 2;
+  const torso = roughPoly([[-sh, -2], [sh, -2], [w, 16], [-w, 16]], seed, true, 0.9)
+    .replace('Z', '');
+  // rounded shoulders via a smoother path
+  const d = `M${-sh} -1 Q${-sh} -5 ${-sh + 3} -5 L${sh - 3} -5 Q${sh} -5 ${sh} -1 L${w} 15 Q${w} 17 ${w - 2} 17 L${-w + 2} 17 Q${-w} 17 ${-w} 15 Z`;
+  textured(inner, d, color, seed + 7, { fillOpacity: 0.78 });
+  const head = roughCircle(0.3 * (r() - 0.5), -13.5, 6.2 + r() * 0.8, seed + 3);
+  textured(inner, head, color, seed + 11, { fillOpacity: 0.78 });
+  void torso;
+  return g;
+}
+// paper document: local origin top-left, w×h, folded corner, ruled lines
+function paper(parent, w, h, seed, lines = 3) {
+  const g = el('g', {}, parent);
+  el('path', { d: roughRect(0, 0, w, h, seed, 0.8), fill: C.paper, ...PEN, opacity: 1 }, g);
+  el('path', { d: roughRect(0, 0, w, h, seed, 0.8), fill: 'url(#hatch)', opacity: 0.25 }, g);
+  const c = Math.min(w, h) * 0.22;
+  el('path', { d: `M${w - c} 0 L${w - c} ${c} L${w} ${c}`, ...PEN }, g);
+  const r = rng(seed + 5);
+  for (let i = 0; i < lines; i++) {
+    const y = h * 0.34 + i * (h * 0.14);
+    el('path', { d: `M${w * 0.16} ${y} L${w * (0.55 + r() * 0.3)} ${y + (r() - 0.5)}`, ...PEN, 'stroke-width': 1, opacity: 0.55 }, g);
+  }
+  return g;
+}
+function text(parent, x, y, str, attrs = {}) {
+  return el('text', { x, y, text: str, 'font-size': 14, ...attrs }, parent);
+}
+// multi-line text with tspans; wraps at ~maxChars
+function textBlock(parent, x, y, str, attrs = {}, maxChars = 24, lh = 1.3) {
+  const words = String(str).split(' '); const lines = []; let cur = '';
+  for (const w of words) { if ((cur + ' ' + w).trim().length > maxChars && cur) { lines.push(cur); cur = w; } else cur = (cur + ' ' + w).trim(); }
+  if (cur) lines.push(cur);
+  const t = el('text', { x, y, 'font-size': 14, ...attrs }, parent);
+  const fs = +(attrs['font-size'] || 14);
+  lines.forEach((l, i) => el('tspan', { x, dy: i ? fs * lh : 0, text: l }, t));
+  return t;
+}
+// dash-reveal a path to progress p
+function reveal(path, p) {
+  const len = path.getTotalLength ? path.getTotalLength() : 600;
+  path.setAttribute('stroke-dasharray', len);
+  path.setAttribute('stroke-dashoffset', (len * (1 - clamp(p))).toFixed(1));
+}
+// handwriting: reveal a text group from left with a clip and a small pencil glyph
+function handwriting(parent, x, y, str, attrs, id) {
+  const g = el('g', {}, parent);
+  const clip = el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, g);
+  const rect = el('rect', { x: x - 4, y: y - 26, width: 0, height: 40 }, clip);
+  const t = text(g, x, y, str, { class: 'hand', 'font-size': 15, 'clip-path': `url(#${id})`, ...attrs });
+  const pencil = el('g', { opacity: 0 }, g);
+  el('path', { d: 'M0 0 L9 -14 L12 -12 L3 2 Z', fill: C.gold, ...PEN, 'stroke-width': 1 }, pencil);
+  el('path', { d: 'M0 0 L1.5 -2.4 L3 -0.6 Z', fill: C.pencil, stroke: 'none' }, pencil);
+  let width = null;
+  const endAnchored = attrs && attrs['text-anchor'] === 'end';
+  const obj = {
+    g, set(p) {
+      if (width == null) {
+        try { width = t.getComputedTextLength() + 6; } catch (e) { width = str.length * 8; }
+        if (endAnchored) rect.setAttribute('x', (x - width + 2).toFixed(1));
+      }
+      const w = width * clamp(p);
+      rect.setAttribute('width', w.toFixed(1));
+      const writing = p > 0 && p < 1;
+      pencil.setAttribute('opacity', writing ? 1 : 0);
+      setT(pencil, (endAnchored ? x - width + 2 : x) + w, y + 1);
+    }
+  };
+  obj.set(0);
+  return obj;
+}
+
+/* ---------- keyframe tracks (pure functions of g) ---------- */
+// keys: [[g, {x,y,s,o,...}], ...]; values eased between neighbours; missing props hold the last value
+function track(keys) {
+  return g => {
+    const out = {};
+    const props = new Set();
+    keys.forEach(k => Object.keys(k[1]).forEach(p => props.add(p)));
+    props.forEach(p => {
+      let a = null, ga = 0, b = null, gb = 0;
+      for (const [kg, kv] of keys) {
+        if (!(p in kv)) continue;
+        if (kg <= g) { a = kv[p]; ga = kg; } else if (b == null) { b = kv[p]; gb = kg; }
+      }
+      if (a == null) out[p] = b;
+      else if (b == null || typeof a !== 'number') out[p] = a;
+      else out[p] = lerp(a, b, smooth((g - ga) / (gb - ga)));
+    });
+    return out;
+  };
+}
+
+/* ---------- content data ---------- */
+const DIMS = [
+  ['Communication', 'Verbose', 'Concise'],
+  ['Decision style', 'Deliberate', 'Action-oriented'],
+  ['Risk orientation', 'Risk-taking', 'Safety-oriented'],
+  ['Trust style', 'Trusting', 'Verifying'],
+  ['Control belief', 'Internal', 'External'],
+  ['AI literacy', 'Novice', 'Expert'],
+  ['Information consumption', 'Deep', 'Skimming'],
+  ['Frustration tolerance', 'Low tolerance', 'High tolerance']
+];
+// six complete personalities, 1 = right pole of each dimension
+const USERS = [
+  { traits: [1, 0, 1, 1, 0, 1, 0, 1], req: 'Show the source and risks. Then I’ll compare the options.' },
+  { traits: [1, 1, 0, 0, 0, 1, 1, 0], req: 'Top opportunity. Next step. I’m ready to act.' },
+  { traits: [0, 0, 1, 1, 0, 1, 0, 1], req: 'Let’s work through the deal history, risks, and evidence before I decide.' },
+  { traits: [0, 0, 1, 1, 1, 0, 0, 1], req: 'Explain the recommendation and help me check it is safe.' },
+  { traits: [1, 1, 1, 0, 0, 1, 1, 1], req: 'Show the key signals. I can take it from there.' },
+  { traits: [1, 1, 1, 1, 1, 0, 1, 0], req: 'Which deal, and why? Keep it simple. I’m short on time.' }
+];
+// deterministic jitter so six marks on one scale don't overlap
+const MARK_POS = USERS.map((u, ui) => u.traits.map((v, di) => {
+  const r = rng(1000 + ui * 17 + di * 3)();
+  return v ? 0.66 + r * 0.3 : 0.04 + r * 0.3;
+}));
+const traitName = (di, v) => DIMS[di][v ? 2 : 1];
+
+const GLIMPSE_A = [
+  { idx: 2, label: 'Concise', quote: 'Top opportunity. Next step?' },
+  { idx: 20, label: 'Verbose', quote: 'Here’s my pipeline context. Let’s work through the options.' },
+  { idx: 40, label: 'Verifying', quote: 'What makes this a priority? Show me the source.' },
+  { idx: 58, label: 'Trusting', quote: 'I’ll start with your recommendation.' }
+];
+const GLIMPSE_B = [
+  { idx: 9, label: 'Reads deeply', quote: 'Let me read the deal history, risks, and next steps.' },
+  { idx: 25, label: 'Skims', quote: 'Just show me the most important signals.' },
+  { idx: 43, label: 'High tolerance', quote: 'That’s incomplete. Let’s try another question.' },
+  { idx: 63, label: 'Low tolerance', quote: 'This is taking too long. I’ll find a quicker way.' }
+];
+const FINDINGS = [
+  ['Source visibility', 'Hard to find supporting sources.', C.teal],
+  ['Information overload', 'Too much information to scan quickly.', C.gold],
+  ['Keyboard barrier', 'A keyboard path breaks before completion.', C.terracotta],
+  ['More findings…', 'Across other users and sessions.', C.gray]
+];
+const REPORT_ROWS = ['Prioritized issues', 'Session evidence', 'Affected user profiles', 'Conversation transcripts'];
+
+const HEADINGS = [
+  [1.0, 'The product', 'Sales Command Center'],
+  [1.55, '', ''],
+  [2.65, 'Meet Shakti', 'Synthetic human orchestration'],
+  [3.55, 'Synthetic user orchestration', 'Three inputs.'],
+  [4.55, 'The user role', 'Start with the person behind the role'],
+  [5.55, 'The shared purpose', 'Provide business outcomes for the sales reps'],
+  [6.55, 'The environment', 'Select the environment variables'],
+  [7.5, 'Bring the inputs together', 'Shakti absorbs the three inputs'],
+  [7.95, 'The synthetic cohort', 'Shakti creates whole spectrum of synthetic users'],
+  [8.55, 'A glimpse of behaviour', 'Different ways to begin the same task'],
+  [9.55, 'Another glimpse', 'Different attention. Different patience.'],
+  [10.55, 'Personality dimensions', 'Eight dimensions. Many ways to be human.'],
+  [11.55, 'Synthetic testing in action', 'Synthetic users interacts with the agentic app'],
+  [12.86, 'Session data', 'Every interaction leaves evidence'],
+  [13.55, 'Evaluate the evidence', 'Evaluation on the synthetic data'],
+  [14.55, 'The PM’s report', 'Evidence to improve the experience']
+];
+const DESCRIPTIONS = {
+  1: 'A sketched Sales Command Center app window. Three tests below it — agentic workflows, functionality, correct data sources — each receive a checkmark and a handwritten “Passed”.',
+  2: 'The app shrinks to the centre. Curved lines lead to four people asking: Is this data correct? Why this deal? Too much to read. Can I use the keyboard? A question mark sits beneath the app.',
+  3: 'The Shakti mark: four muted coloured squares inside a pale teal sketched square, with the expanded name Synthetic Human Agent for Knowledge, Testing and Insight.',
+  4: 'Shakti sits at the lower left. Three inputs across the top — user role, business outcome, environment — connect to it with curved pencil lines.',
+  5: 'A pencil writes “Sales rep” above the user role input.',
+  6: 'A pencil writes Identify, Prioritize and Get context above the business outcome input.',
+  7: 'A pencil writes the chosen environment options beside the environment input. A transparent panel lets you choose an example test environment.',
+  8: 'Shakti absorbs the three inputs, then expands into a grid of 72 small coloured people with slight natural variation.',
+  9: 'Most people fade. Four remain in place: Concise, Verbose, Verifying and Trusting, each with a short quote.',
+  10: 'A different four people remain: Reads deeply, Skims, High tolerance and Low tolerance, each with a short quote.',
+  11: 'Eight horizontal pencil scales, one per personality dimension, each with six coloured marks. Each colour is one complete synthetic personality.',
+  12: 'The marks gather into six people queued beside the app. One at a time, a user approaches Sales Command Center, makes a request, and a session record joins a stack of papers.',
+  13: 'The top session paper opens into two pages: Conversations (prompts, AI responses, follow-up questions) and Outcomes (goal completion, time and effort, moments of friction). Both stay linked to the user and environment.',
+  14: 'A record stack on the left, a teal magnifying glass in the middle evaluating task outcome, interaction experience and AI responses, and finding cards on the right: source visibility, information overload, keyboard barrier, and more findings.',
+  15: 'The finding cards become rows of an illustrative experience report — prioritized issues, session evidence, affected user profiles, conversation transcripts — marked Ready for review, with a pencil arrow to the product manager.'
+};
+
+/* ---------- layout (desktop / mobile) ---------- */
+function makeLayout(mobile) {
+  if (!mobile) return {
+    W: 1000, H: 700, fs: 1, mobile: false,
+    app1: { x: 500, y: 235, s: 1 }, tests: { y: 372 },
+    app2: { x: 500, y: 330, s: 0.45 },
+    qPeople: [[300, 165], [720, 185], [300, 445], [720, 465]],
+    shakti3: { x: 500, y: 320, s: 1 }, shakti4: { x: 500, y: 575, s: 0.5 },
+    inputs: [[250, 225], [500, 225], [750, 225]], inputS: 1,
+    grid: { cols: 12, rows: 6, x0: 170, x1: 830, y0: 150, y1: 650 },
+    scales: { x0: 70, x1: 900, y0: 160, dy: 66 },
+    queue: { x: 120, y0: 190, dy: 48 }, app12: { x: 530, y: 320, s: 0.72 }, stand: { x: 360, y: 320 },
+    traits: { y: 440, cx: [400, 560] }, stack12: { x: 850, y: 300 },
+    stack13: { x: 150, y: 560, s: 0.8 }, pages: [[370, 370], [630, 370]], pageS: 1,
+    stack14: { x: 160, y: 380, s: 1 }, glass: { x: 450, y: 310 }, findings: { x: 690, w: 250, h: 60, y0: 180, dy: 86 },
+    report: { x: 270, y: 150, w: 270, h: 420 }, pm: { x: 790, y: 360, s: 2.6 }
+  };
+  return {
+    W: 700, H: 760, fs: 1.3, mobile: true,
+    app1: { x: 350, y: 250, s: 0.95 }, tests: { y: 385 },
+    app2: { x: 350, y: 340, s: 0.45 },
+    qPeople: [[150, 190], [550, 210], [150, 470], [550, 490]],
+    shakti3: { x: 350, y: 330, s: 0.9 }, shakti4: { x: 350, y: 640, s: 0.4 },
+    inputs: [[120, 200], [350, 200], [580, 200]], inputS: 0.95,
+    grid: { cols: 8, rows: 9, x0: 80, x1: 620, y0: 150, y1: 720 },
+    scales: { x0: 50, x1: 650, y0: 150, dy: 74 },
+    queue: { x: 70, y0: 200, dy: 46 }, app12: { x: 380, y: 330, s: 0.55 }, stand: { x: 215, y: 330 },
+    traits: { y: 430, cx: [200, 440] }, stack12: { x: 610, y: 320 },
+    stack13: { x: 100, y: 680, s: 0.7 }, pages: [[190, 380], [500, 380]], pageS: 0.95,
+    stack14: { x: 80, y: 380, s: 0.85 }, glass: { x: 290, y: 300 }, findings: { x: 430, w: 250, h: 84, y0: 150, dy: 100 },
+    report: { x: 50, y: 150, w: 270, h: 420 }, pm: { x: 560, y: 400, s: 2.2 }
+  };
+}
+
+/* ---------- scene construction ---------- */
+function buildScene(svg, L) {
+  while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild); // keep <desc>
+  svg.setAttribute('viewBox', `0 0 ${L.W} ${L.H}`);
+  const FS = L.fs;
+  const T = (parent, x, y, str, attrs = {}) => text(parent, x, y, str, { ...attrs, 'font-size': +(attrs['font-size'] || 14) * FS });
+  const TB = (parent, x, y, str, attrs = {}, mc, lh) => textBlock(parent, x, y, str, { ...attrs, 'font-size': +(attrs['font-size'] || 14) * FS }, mc, lh);
+  const S = {}; // scene handles
+
+  const defs = el('defs', {}, svg);
+  const pat = el('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' }, defs);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: C.text, 'stroke-width': 0.7, opacity: 0.16 }, pat);
+  const marker = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+  el('path', { d: 'M1 1 L9 5 L1 9', fill: 'none', stroke: C.teal, 'stroke-width': 1.3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, marker);
+
+  const layers = {};
+  ['links', 'back', 'mid', 'front', 'labels'].forEach(n => { layers[n] = el('g', { class: 'layer-' + n }, svg); });
+
+  /* --- app window (local: origin top-left, 300×210) --- */
+  const APP_W = 300, APP_H = 210;
+  function buildApp(parent) {
+    const g = el('g', {}, parent);
+    el('path', { d: roughRect(0, 0, APP_W, APP_H, 21, 1.1), fill: C.paper, ...PEN, opacity: 1 }, g);
+    el('path', { d: roughRect(0, 0, APP_W, APP_H, 21, 1.1), fill: 'url(#hatch)', opacity: 0.25 }, g);
+    el('path', { d: `M1 27 L${APP_W - 1} 27.5`, ...PEN, 'stroke-width': 1 }, g);
+    [12, 22, 32].forEach((x, i) => el('circle', { cx: x, cy: 14, r: 3, fill: [C.terracotta, C.gold, C.sage][i], opacity: 0.8 }, g));
+    T(g, 46, 18.5, 'Sales Command Center', { 'font-size': 11.5, 'font-weight': 600, fill: C.text2 });
+    T(g, 16, 54, 'Your opportunities, in focus', { 'font-size': 14.5, 'font-weight': 600 });
+    const rows = ['Priority opportunities', 'Deal context & signals', 'Recommended next steps'];
+    const cols = [C.teal, C.gold, C.sage];
+    rows.forEach((r, i) => {
+      const y = 84 + i * 34;
+      textured(g, roughRect(16, y - 12, 14, 14, 30 + i, 0.6), cols[i], 31 + i);
+      T(g, 40, y, r, { 'font-size': 13, fill: C.text });
+      // little sketched bars to the right
+      const r2 = rng(40 + i);
+      for (let b = 0; b < 3; b++) {
+        const w = 24 + r2() * 40;
+        el('path', { d: `M${APP_W - 100 + b * 4} ${y - 9 + b * 6} L${APP_W - 100 + b * 4 + w} ${y - 9 + b * 6 + (r2() - 0.5)}`, ...PEN, 'stroke-width': 1, opacity: 0.35 }, g);
+      }
+    });
+    return g;
+  }
+  S.app = buildApp(layers.mid);
+
+  /* --- three test rows beneath the app --- */
+  S.tests = el('g', {}, layers.mid);
+  S.testRows = ['Agentic workflows', 'Functionality', 'Correct data sources'].map((name, i) => {
+    const y = i * 30;
+    const row = el('g', {}, S.tests);
+    el('path', { d: roughRect(-150, y - 12, 16, 16, 50 + i, 0.7), fill: C.paper, ...PEN }, row);
+    const check = el('path', { d: `M${-147} ${y - 3} L${-142} ${y + 2} L${-136} ${y - 9}`, stroke: C.sage, 'stroke-width': 2.2, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, row);
+    T(row, -126, y, name, { 'font-size': 14 });
+    const passed = handwriting(row, 46, y + 1, 'Passed', { fill: C.sage, 'font-size': 15 * FS }, 'clip-pass-' + i);
+    return { check, passed };
+  });
+
+  /* --- human question scene --- */
+  S.q = el('g', {}, layers.front);
+  S.qLinks = el('g', {}, layers.links);
+  const Q = ['Is this data correct?', 'Why this deal?', 'Too much to read.', 'Can I use the keyboard?'];
+  S.qPeople = L.qPeople.map(([x, y], i) => {
+    const p = person(S.q, PALETTE[i], 100 + i, 1.5);
+    setT(p, x, y);
+    T(S.q, x, y + 40, Q[i], { 'font-size': 13.5, class: 'pencil', 'text-anchor': 'middle' });
+    return p;
+  });
+  S.qLines = L.qPeople.map(() => el('path', { ...LINE, 'stroke-width': 1.2 }, S.qLinks));
+  S.qMark = T(S.q, 0, 0, '?', { 'font-size': 30, fill: C.terracotta, 'text-anchor': 'middle', 'font-weight': 600 });
+
+  /* --- Shakti mark (local origin centre, 200×200 outer square) --- */
+  S.shakti = el('g', {}, layers.mid);
+  {
+    const g = S.shakti;
+    el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), fill: C.paleTeal, opacity: 0.9 }, g);
+    el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), fill: 'url(#hatch)', opacity: 0.35 }, g);
+    el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), ...PEN, 'stroke-width': 1.2, opacity: 0.45 }, g);
+    const sq = [[-24, -24, C.teal], [4, -24, C.sage], [-24, 4, C.terracotta], [4, 4, C.gold]];
+    sq.forEach(([x, y, c], i) => textured(g, roughRect(x, y, 20, 20, 61 + i, 0.7), c, 70 + i, { fillOpacity: 0.75, sw: 0.9 }));
+    T(g, 0, 134, 'Shakti', { 'font-size': 22, 'font-weight': 600, 'text-anchor': 'middle' });
+    T(g, 0, 156, 'Synthetic user orchestration', { 'font-size': 13, fill: C.text2, 'text-anchor': 'middle' });
+    S.shaktiName = el('g', {}, g);
+    T(S.shaktiName, 0, 194, 'Synthetic Human Agent', { 'font-size': 15, 'text-anchor': 'middle', class: 'pencil' });
+    T(S.shaktiName, 0, 214, 'for Knowledge, Testing and Insight', { 'font-size': 15, 'text-anchor': 'middle', class: 'pencil' });
+  }
+
+  /* --- three inputs --- */
+  S.inputLinks = L.inputs.map(() => el('path', { ...LINE }, layers.links));
+  const INPUT_DEFS = [
+    ['User role', C.teal, g => { const p = person(g, C.paper, 80, 1.1); setT(p, 0, 1); }],
+    ['Business outcome', C.sage, g => { el('path', { d: roughCircle(0, 0, 15, 81), ...PEN, stroke: C.paper, 'stroke-width': 1.6, opacity: 0.95 }, g); el('path', { d: roughCircle(0, 0, 7, 82), fill: C.paper, opacity: 0.9 }, g); }],
+    ['Environment', C.terracotta, g => { el('path', { d: roughRect(-16, -13, 32, 22, 83, 0.8), ...PEN, stroke: C.paper, 'stroke-width': 1.6, opacity: 0.95 }, g); el('path', { d: 'M-8 14 L8 14 M0 9 L0 14', ...PEN, stroke: C.paper, 'stroke-width': 1.6, opacity: 0.95 }, g); }]
+  ];
+  S.inputs = INPUT_DEFS.map(([label, color, icon], i) => {
+    const g = el('g', {}, layers.front);
+    const inner = el('g', { transform: `scale(${L.inputS})` }, g);
+    textured(inner, roughRect(-22, -22, 44, 44, 90 + i, 1), color, 91 + i, { fillOpacity: 0.8 });
+    void icon;
+    T(inner, 0, 44, label, { 'font-size': 12.5, 'text-anchor': 'middle', fill: C.text2 });
+    return { g, inner };
+  });
+  S.noteRole = handwriting(S.inputs[0].inner, -40, -44, 'Sales rep', { 'font-size': 20 * FS }, 'clip-role');
+  S.noteOutcome = ['Identify', 'Prioritize', 'Get context'].map((s, i) =>
+    handwriting(S.inputs[1].inner, -36, -84 + i * 22, s, { 'font-size': 18 * FS }, 'clip-outcome-' + i));
+  S.envNotes = el('g', {}, S.inputs[2].inner);
+  S.noteEnv = [];
+  S.setEnvNotes = lines => {
+    while (S.envNotes.firstChild) S.envNotes.removeChild(S.envNotes.firstChild);
+    S.noteEnv = lines.map((s, i) => L.mobile
+      ? handwriting(S.envNotes, 30, 72 + i * 22, s, { 'font-size': 14 * FS, 'text-anchor': 'end' }, 'clip-env-' + i)
+      : handwriting(S.envNotes, 36, -30 + i * 22, s, { 'font-size': 15 * FS }, 'clip-env-' + i));
+  };
+  S.setEnvNotes(['Both', 'No accessibility needs', 'Desktop · 1920×1080']);
+
+  /* --- cohort grid (72 people, seeded variation) --- */
+  const G = L.grid, N = G.cols * G.rows;
+  S.cohortPos = []; S.cohort = [];
+  {
+    const r = rng(777);
+    const cw = (G.x1 - G.x0) / (G.cols - 1), ch = (G.y1 - G.y0) / (G.rows - 1);
+    for (let i = 0; i < N; i++) {
+      const col = i % G.cols, row = Math.floor(i / G.cols);
+      const x = G.x0 + col * cw + (r() - 0.5) * 8, y = G.y0 + row * ch + (r() - 0.5) * 8;
+      const s = (L.mobile ? 1.05 : 1.15) * (0.9 + r() * 0.3), rot = (r() - 0.5) * 14, delay = r() * 0.12;
+      S.cohortPos.push({ x, y, s, rot, delay, col, row });
+      S.cohort.push(person(layers.mid, PALETTE[(i * 7 + row) % 6], 200 + i, 1));
+    }
+  }
+  const buildGlimpse = set => set.map(({ idx, label, quote }) => {
+    const p = S.cohortPos[idx];
+    const g = el('g', {}, layers.labels);
+    T(g, p.x, p.y + 36, label, { 'font-size': 12.5, 'font-weight': 600, 'text-anchor': 'middle' });
+    TB(g, p.x, p.y + 52, quote, { 'font-size': 12, class: 'pencil', 'text-anchor': 'middle' }, L.mobile ? 20 : 28);
+    return g;
+  });
+  S.glimpseA = buildGlimpse(GLIMPSE_A);
+  S.glimpseB = buildGlimpse(GLIMPSE_B);
+
+  /* --- eight personality scales with 48 marks --- */
+  S.scales = el('g', {}, layers.back);
+  {
+    const sc = L.scales;
+    DIMS.forEach(([name, lo, hi], i) => {
+      const y = sc.y0 + i * sc.dy;
+      T(S.scales, sc.x0, y - 22, name, { 'font-size': 11.5, 'font-weight': 600 });
+      T(S.scales, sc.x0, y - 8, lo, { 'font-size': 11, fill: C.text2 });
+      T(S.scales, sc.x1, y - 8, hi, { 'font-size': 11, fill: C.text2, 'text-anchor': 'end' });
+      el('path', { d: roughPoly([[sc.x0, y], [sc.x1, y]], 300 + i, false, 0.7), ...PEN, 'stroke-width': 1, opacity: 0.6 }, S.scales);
+    });
+  }
+  S.marks = [];
+  USERS.forEach((u, ui) => MARK_POS[ui].forEach((pos, di) => {
+    const g = el('g', {}, layers.front);
+    el('circle', { cx: 0, cy: 0, r: 4, fill: PALETTE[ui], opacity: 0.9 }, g);
+    el('path', { d: roughCircle(0, 0, 4, 400 + ui * 8 + di), ...PEN, 'stroke-width': 0.8 }, g);
+    S.marks.push({ g, ui, di, x: L.scales.x0 + pos * (L.scales.x1 - L.scales.x0), y: L.scales.y0 + di * L.scales.dy });
+  }));
+
+  /* --- queue of six, testing scene --- */
+  S.queue = USERS.map((u, i) => person(layers.front, PALETTE[i], 500 + i, 1.0));
+  S.queueMeta = USERS.map((u, i) => {
+    const g = el('g', {}, layers.labels);
+    T(g, L.queue.x + 24, L.queue.y0 + i * L.queue.dy + 4, '0' + (i + 1), { 'font-size': 11, fill: C.gray });
+    const check = el('path', { d: `M${L.queue.x - 36} ${L.queue.y0 + i * L.queue.dy} l4 4 l7 -8`, stroke: C.sage, 'stroke-width': 1.8, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    return { g, check };
+  });
+  S.queueLabel = T(layers.labels, L.queue.x, L.queue.y0 - 44, 'Synthetic users', { class: 'ink-label', 'font-size': 10.5, 'text-anchor': 'middle' });
+  S.queueMore = el('g', {}, layers.labels);
+  [0, 8, 16].forEach(dy => el('circle', { cx: L.queue.x, cy: dy - 8, r: 1.6, fill: C.text2 }, S.queueMore));
+  T(S.queueMore, L.queue.x, 30, 'n more', { 'font-size': 12.5, 'font-weight': 600, 'text-anchor': 'middle', fill: C.text2 });
+  T(S.queueMore, L.queue.x, 46, 'to be tested', { 'font-size': 11.5, class: 'pencil', 'text-anchor': 'middle' });
+  S.arrowUser = el('path', { ...LINE, 'stroke-width': 1.2, 'marker-end': 'url(#arrow)' }, layers.links);
+  S.arrowPaper = el('path', { ...LINE, 'stroke-width': 1.2, 'marker-end': 'url(#arrow)' }, layers.links);
+  S.sessionLabel = T(layers.labels, L.stack12.x, L.stack12.y - 70, 'Session data', { class: 'ink-label', 'font-size': 10.5, 'text-anchor': 'middle' });
+  S.sessionCount = T(layers.labels, L.stack12.x, L.stack12.y + 56, '', { 'font-size': 11, fill: C.gray, 'text-anchor': 'middle' });
+  S.speech = el('g', {}, layers.labels);
+  {
+    S.speechTitle = T(S.speech, 0, 0, '', { 'font-size': 12, 'font-weight': 600, 'text-anchor': 'middle' });
+    S.speechText = el('text', { x: 0, y: 18, 'font-size': 12.5 * FS, class: 'pencil', 'text-anchor': 'middle' }, S.speech);
+    S.speechH = 0;
+    S.setSpeechHeight = h => { S.speechH = h; };
+  }
+  S.traits = el('g', {}, layers.labels);
+  S.traitRows = DIMS.map((d, di) => {
+    const col = di < 4 ? 0 : 1, row = di % 4;
+    const x = L.traits.cx[col], y = L.traits.y + row * 30;
+    const g = el('g', {}, S.traits);
+    T(g, x + 34, y - 12, d[0], { 'font-size': 9.5, fill: C.gray });
+    el('path', { d: `M${x} ${y - 4} L${x + 26} ${y - 4}`, ...PEN, 'stroke-width': 1, opacity: 0.5 }, g);
+    const dot = el('circle', { cx: x, cy: y - 4, r: 3.5, fill: C.teal }, g);
+    const t = T(g, x + 34, y, '', { 'font-size': 12 });
+    return { dot, t, x, y };
+  });
+  S.papers = USERS.map((u, i) => { const p = paper(layers.front, 44, 56, 600 + i, 3); return p; });
+
+  /* --- session data pages (local origin centre, 230×300) --- */
+  const PW = 230, PH = 300;
+  function buildPage(num, title, items, seed) {
+    const g = el('g', {}, layers.front);
+    const inner = el('g', { transform: `translate(${-PW / 2} ${-PH / 2})` }, g);
+    el('path', { d: roughRect(0, 0, PW, PH, seed, 1), fill: C.paper, ...PEN, opacity: 1 }, inner);
+    el('path', { d: roughRect(0, 0, PW, PH, seed, 1), fill: 'url(#hatch)', opacity: 0.2 }, inner);
+    el('path', { d: `M${PW - 40} 0 L${PW - 40} 40 L${PW} 40`, ...PEN }, inner);
+    const content = el('g', {}, inner);
+    T(content, 22, 40, 'SESSION DATA · ' + num, { class: 'ink-label', 'font-size': 11 });
+    T(content, 22, 74, title, { 'font-size': 20, 'font-weight': 600 });
+    items.forEach((it, i) => {
+      el('circle', { cx: 28, cy: 108 + i * 30 - 4, r: 3, fill: [C.teal, C.sage, C.gold][i] }, content);
+      T(content, 40, 108 + i * 30, it, { 'font-size': 14.5 });
+    });
+    el('path', { d: `M22 ${PH - 62} L${PW - 22} ${PH - 62}`, ...PEN, 'stroke-width': 1, opacity: 0.4 }, content);
+    const p = person(content, C.plum, seed + 9, 0.8); setT(p, 34, PH - 36);
+    el('path', { d: roughRect(50, PH - 48, 20, 14, seed + 3, 0.6), ...PEN, 'stroke-width': 1 }, content);
+    T(content, 80, PH - 34, 'User · Environment linked', { 'font-size': 11.5, class: 'pencil' });
+    return { g, content };
+  }
+  S.pageA = buildPage('01', 'Conversations', ['Prompts', 'AI responses', 'Follow-up questions'], 700);
+  S.pageB = buildPage('02', 'Outcomes', ['Goal completion', 'Time and effort', 'Moments of friction'], 720);
+
+  /* --- evaluation: magnifying glass, evaluate list, findings, links --- */
+  S.evalLinks = el('g', {}, layers.links);
+  S.evalPaths = [0, 1, 2, 3, 4].map(() => el('path', { ...LINE, 'stroke-width': 1.1, opacity: 0.7 }, S.evalLinks));
+  S.arrowheads = [0, 1, 2, 3, 4].map(() => el('path', { d: 'M-5 -4 L2 0 L-5 4', fill: 'none', stroke: C.teal, 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, S.evalLinks));
+  S.evalLabels = el('g', {}, layers.labels);
+  T(S.evalLabels, L.stack14.x, L.stack14.y - 60 * L.stack14.s, 'Session records', { class: 'ink-label', 'font-size': 10.5, 'text-anchor': 'middle' });
+  T(S.evalLabels, L.findings.x + L.findings.w / 2, L.findings.y0 - 22, 'Example findings', { class: 'ink-label', 'font-size': 10.5, 'text-anchor': 'middle' });
+  S.glass = el('g', {}, layers.front);
+  {
+    const g = S.glass;
+    el('path', { d: roughCircle(0, 0, 40, 800), fill: C.paleTeal, opacity: 0.6 }, g);
+    el('path', { d: roughCircle(0, 0, 40, 800), ...PEN, stroke: C.teal, 'stroke-width': 3.2, opacity: 0.95 }, g);
+    el('path', { d: roughCircle(0, 0, 33, 801), ...PEN, stroke: C.teal, 'stroke-width': 1, opacity: 0.6 }, g);
+    el('path', { d: 'M29 29 L58 58', stroke: C.teal, 'stroke-width': 7, 'stroke-linecap': 'round' }, g);
+    el('path', { d: 'M-16 -10 Q-6 -24 8 -20', ...PEN, stroke: C.paper, 'stroke-width': 2, opacity: 0.9 }, g);
+    T(g, 0, 78, 'Evaluate', { 'font-size': 14, 'font-weight': 600, 'text-anchor': 'middle' });
+    ['Task outcome', 'Interaction experience', 'AI responses'].forEach((s, i) => {
+      el('circle', { cx: -58, cy: 96 + i * 19 - 4, r: 2.6, fill: C.teal }, g);
+      T(g, -50, 96 + i * 19, s, { 'font-size': 12.5, fill: C.text2 });
+    });
+  }
+  S.findings = FINDINGS.map(([title, desc, color], i) => {
+    const g = el('g', {}, layers.front);
+    const rect = el('path', { fill: C.paper, ...PEN, opacity: 1 }, g);
+    const dot = el('circle', { r: 4.5, fill: color, opacity: 0.9 }, g);
+    const fText = el('g', {}, g);
+    const t1 = T(fText, 0, 0, title, { 'font-size': 13, 'font-weight': 600 });
+    const t2 = TB(fText, 0, 0, desc, { 'font-size': 12, fill: C.text2 }, L.mobile ? 26 : 44);
+    const rText = el('g', {}, g);
+    const t3 = T(rText, 0, 0, REPORT_ROWS[i], { 'font-size': L.mobile ? 11 : 13.5, 'font-weight': 600 });
+    return { g, rect, dot, fText, rText, t1, t2, t3, seed: 850 + i };
+  });
+
+  /* --- report paper + product manager --- */
+  S.report = el('g', {}, layers.mid);
+  {
+    const R = L.report, g = S.report;
+    S.reportOutline = el('path', { d: roughRect(R.x, R.y, R.w, R.h, 900, 1.2), fill: C.paper, ...PEN, 'stroke-width': 1.4, opacity: 1 }, g);
+    el('path', { d: roughRect(R.x, R.y, R.w, R.h, 900, 1.2), fill: 'url(#hatch)', opacity: 0.18 }, g);
+    S.reportText = el('g', {}, g);
+    T(S.reportText, R.x + 24, R.y + 34, 'ILLUSTRATIVE REPORT', { class: 'ink-label', 'font-size': 11 });
+    T(S.reportText, R.x + 24, R.y + 64, 'Experience report', { 'font-size': 20, 'font-weight': 600 });
+    T(S.reportText, R.x + 24, R.y + 86, 'Sales Command Center', { 'font-size': 13.5, fill: C.text2 });
+    S.reportReady = el('g', {}, g);
+    el('path', { d: roughCircle(R.x + 34, R.y + R.h - 34, 9, 901), fill: C.sage, opacity: 0.85 }, S.reportReady);
+    el('path', { d: `M${R.x + 30} ${R.y + R.h - 34} L${R.x + 33} ${R.y + R.h - 30} L${R.x + 39} ${R.y + R.h - 39}`, stroke: C.paper, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }, S.reportReady);
+    T(S.reportReady, R.x + 52, R.y + R.h - 29, 'Ready for review', { 'font-size': 14, 'font-weight': 600, fill: C.sage });
+  }
+  S.pmArrow = el('path', { ...LINE, 'stroke-width': 1.4, 'marker-end': 'url(#arrow)' }, layers.links);
+  S.pm = el('g', {}, layers.front);
+  {
+    const p = person(S.pm, C.plum, 950, 1); setT(p, 0, 0, L.pm.s);
+    T(S.pm, 0, 64, 'The product manager', { 'font-size': 14, 'font-weight': 600, 'text-anchor': 'middle' });
+    T(S.pm, 0, 92, 'Review the evidence.', { 'font-size': 13, class: 'pencil', 'text-anchor': 'middle' });
+    T(S.pm, 0, 110, 'Prioritize improvements.', { 'font-size': 13, class: 'pencil', 'text-anchor': 'middle' });
+  }
+
+  return S;
+}
+
+/* ---------- per-frame rendering: everything is a function of g ---------- */
+function makeRenderer(S, L, ctx) {
+  const setTC = (n, cx, cy, s, w, h, o) => { setT(n, cx, cy, s); n.setAttribute('transform', `translate(${cx.toFixed(2)} ${cy.toFixed(2)}) scale(${s.toFixed(4)}) translate(${(-w / 2).toFixed(1)} ${(-h / 2).toFixed(1)})`); if (o != null) setO(n, o); };
+  const center = { x: L.W / 2, y: L.H / 2 + 20 };
+  const SEQ0 = 12.08, SEQ1 = 12.84, SLOT = (SEQ1 - SEQ0) / 6;
+
+  const appT = track([
+    [1, { x: L.app1.x, y: L.app1.y, s: L.app1.s, o: 1 }], [1.55, { x: L.app1.x, y: L.app1.y, s: L.app1.s }],
+    [1.95, { x: L.app2.x, y: L.app2.y, s: L.app2.s }], [2.55, { o: 1 }], [2.85, { o: 0 }],
+    [11.6, { x: L.app12.x, y: L.app12.y, s: L.app12.s, o: 0 }], [11.95, { o: 1 }], [12.86, { o: 1 }], [12.98, { o: 0 }]
+  ]);
+  const shaktiT = track([
+    [2.7, { x: L.shakti3.x, y: L.shakti3.y, s: L.shakti3.s, o: 0 }], [2.95, { o: 1 }],
+    [3.55, { x: L.shakti3.x, y: L.shakti3.y, s: L.shakti3.s }], [3.95, { x: L.shakti4.x, y: L.shakti4.y, s: L.shakti4.s }],
+    [7.8, { x: L.shakti4.x, y: L.shakti4.y, s: L.shakti4.s }], [8.05, { x: center.x, y: center.y, s: L.shakti4.s }],
+    [8.02, { o: 1 }], [8.28, { o: 0 }]
+  ]);
+  const inputT = L.inputs.map(([x, y], i) => track([
+    [3.72 + i * 0.07, { x, y: y - 20, s: 1, o: 0 }], [3.95 + i * 0.07, { y, o: 1 }],
+    [7.55, { x, y, s: 1, o: 1 }], [7.75, { x: L.shakti4.x, y: L.shakti4.y, s: 0.15, o: 0 }]
+  ]));
+  const qy = j => L.queue.y0 + j * L.queue.dy;
+  const markT = S.marks.map(m => track([
+    [10.7 + m.di * 0.03, { x: m.x, y: m.y, s: 0, o: 0 }], [10.95 + m.di * 0.03, { s: 1, o: 1 }],
+    [11.55, { x: m.x, y: m.y, s: 1 }], [11.95, { x: L.queue.x, y: qy(m.ui), s: 0.25 }], [11.86, { o: 1 }], [11.98, { o: 0 }]
+  ]));
+  const pcEarly = { x: (L.pages[0][0] + L.pages[1][0]) / 2, y: L.pages[0][1] };
+  const stackT = track([
+    [12.86, { x: L.stack12.x, y: L.stack12.y, s: 1, o: 1 }], [13.14, { x: pcEarly.x, y: pcEarly.y, s: 5 }],
+    [12.98, { o: 1 }], [13.12, { o: 0 }],
+    [13.72, { x: pcEarly.x, y: pcEarly.y, s: 5 }], [13.98, { x: L.stack14.x, y: L.stack14.y, s: L.stack14.s }],
+    [13.84, { o: 0 }], [13.98, { o: 1 }],
+    [14.55, { o: 1 }], [14.7, { o: 0 }]
+  ]);
+  const stackTop = st => ({ x: st.x + 15 * st.s, y: st.y - 25 * st.s }); // centre of the top paper
+  const pc = { x: (L.pages[0][0] + L.pages[1][0]) / 2, y: L.pages[0][1] };
+  const top12 = stackTop({ x: L.stack12.x, y: L.stack12.y, s: 1 }), top14 = stackTop({ x: L.stack14.x, y: L.stack14.y, s: L.stack14.s });
+  const pageAT = track([
+    [12.86, { x: L.stack12.x, y: L.stack12.y, s: 0.19, o: 0 }], [13.14, { x: pc.x, y: pc.y, s: L.pageS }],
+    [12.98, { o: 0 }], [13.1, { o: 1 }],
+    [13.4, { x: L.pages[0][0] }], [13.55, { x: L.pages[0][0], y: pc.y, s: L.pageS }],
+    [13.72, { x: pc.x }], [13.98, { x: L.stack14.x, y: L.stack14.y, s: 0.19 }], [13.84, { o: 1 }], [13.96, { o: 0 }]
+  ]);
+  const pageBT = track([
+    [13.15, { x: pc.x, y: pc.y, s: L.pageS, o: 0 }], [13.24, { o: 1 }], [13.4, { x: L.pages[1][0] }],
+    [13.55, { x: L.pages[1][0] }], [13.72, { x: pc.x }], [13.64, { o: 1 }], [13.72, { o: 0 }]
+  ]);
+  const F = L.findings, R = L.report;
+  const findT = FINDINGS.map((f, i) => track([
+    [14.0 + i * 0.06, { x: F.x + 30, y: F.y0 + i * F.dy, w: F.w, h: F.h, o: 0 }], [14.25 + i * 0.06, { x: F.x, o: i === 3 ? 0.33 : 1 }],
+    [14.55, { x: F.x, y: F.y0 + i * F.dy, w: F.w, h: F.h, o: i === 3 ? 0.33 : 1 }],
+    [14.95, { x: R.x + 24, y: R.y + 112 + i * 54, w: R.w - 48, h: 42, o: 1 }]
+  ]));
+  const findRectCache = FINDINGS.map(() => ({ w: 0, h: 0 }));
+  let speechUser = -1;
+
+  function render(g) {
+    /* --- product & tests --- */
+    const app = appT(g);
+    setTC(S.app, app.x, app.y, app.s, 300, 210, app.o);
+    setT(S.tests, L.app1.x, L.tests.y, L.app1.s); setO(S.tests, 1 - seg(g, 1.5, 1.75));
+    S.testRows.forEach((row, i) => {
+      const p = clamp(ctx.checkProgress * 3 - i);
+      reveal(row.check, clamp(p * 2)); row.passed.set(clamp(p * 2 - 1));
+    });
+
+    /* --- human question --- */
+    const qIn = seg(g, 2.05, 2.45), qOut = 1 - seg(g, 2.55, 2.85);
+    setO(S.q, qIn * qOut); setO(S.qLinks, qOut);
+    S.qPeople.forEach((p, i) => {
+      const [x, y] = L.qPeople[i]; const e = seg(g, 2.1 + i * 0.06, 2.35 + i * 0.06);
+      setT(p, x, y, lerp(0.6, 1, e)); setO(p, e);
+      const path = S.qLines[i];
+      // start on the edge of the app box so the line reads as coming from behind it
+      const dx = x - app.x, dy = y - app.y, hw = 150 * app.s, hh = 105 * app.s;
+      const k = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6));
+      path.setAttribute('d', curve(app.x + dx * k, app.y + dy * k, x, y + (i < 2 ? 18 : -18), i % 2 ? 0.18 : -0.18));
+      reveal(path, seg(g, 1.95 + i * 0.05, 2.3 + i * 0.05));
+    });
+    setT(S.qMark, app.x, app.y + 105 * app.s + 34); setO(S.qMark, seg(g, 2.0, 2.2));
+
+    /* --- Shakti --- */
+    const sh = shaktiT(g);
+    setT(S.shakti, sh.x, sh.y, sh.s); setO(S.shakti, sh.o);
+    setO(S.shaktiName, seg(g, 2.85, 3.05) * (1 - seg(g, 3.55, 3.7)));
+
+    /* --- inputs, links, handwriting --- */
+    const linkOut = 1 - seg(g, 7.5, 7.62);
+    S.inputs.forEach((inp, i) => {
+      const t = inputT[i](g);
+      setT(inp.g, t.x, t.y, t.s); setO(inp.g, t.o);
+      const path = S.inputLinks[i];
+      path.setAttribute('d', `M${(t.x).toFixed(1)} ${(t.y + 24 * t.s).toFixed(1)} C ${(t.x).toFixed(1)} ${(t.y + 130 * t.s).toFixed(1)}, ${sh.x.toFixed(1)} ${(sh.y - 190 * sh.s).toFixed(1)}, ${sh.x.toFixed(1)} ${(sh.y - 100 * sh.s).toFixed(1)}`);
+      reveal(path, seg(g, 3.95 + i * 0.08, 4.25 + i * 0.08)); setO(path, linkOut * t.o);
+    });
+    S.noteRole.set(seg(g, 4.55, 4.9));
+    S.noteOutcome.forEach((n, i) => n.set(seg(g, 5.55 + i * 0.13, 5.8 + i * 0.13)));
+    S.noteEnv.forEach((n, i) => n.set(seg(g, 6.55 + i * 0.12, 6.8 + i * 0.12)));
+    ctx.envPanel(g, sh);
+
+    /* --- cohort --- */
+    const inA = new Set(GLIMPSE_A.map(x => x.idx)), inB = new Set(GLIMPSE_B.map(x => x.idx));
+    const dimAll = seg(g, 8.55, 8.85), dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.8);
+    const SQ = [[-14, -14], [14, -14], [-14, 14], [14, 14]]; // the four small squares of the Shakti mark
+    S.cohort.forEach((p, i) => {
+      const P = S.cohortPos[i];
+      const e = seg(g, 8.0 + P.delay * 2.5, 8.4 + P.delay * 2.5, easeOut);
+      const sq = SQ[(P.col < L.grid.cols / 2 ? 0 : 1) + (P.row < L.grid.rows / 2 ? 0 : 2)];
+      const ox = sh.x + sq[0] * sh.s, oy = sh.y + sq[1] * sh.s;
+      let o = e * (1 - gone);
+      if (inA.has(i)) o *= lerp(1, 0.07, dimA);
+      else if (inB.has(i)) o *= g < 9.62 ? lerp(1, 0.07, dimAll) : lerp(0.07, 1, riseB);
+      else o *= lerp(1, 0.07, dimAll);
+      setT(p, lerp(ox, P.x, e), lerp(oy, P.y, e), lerp(0.25, P.s, e), P.rot); setO(p, o);
+    });
+    S.glimpseA.forEach(gg => setO(gg, seg(g, 8.8, 9.0) * (1 - seg(g, 9.55, 9.72))));
+    S.glimpseB.forEach(gg => setO(gg, seg(g, 9.85, 10.05) * (1 - seg(g, 10.55, 10.7))));
+
+    /* --- scales & marks --- */
+    setO(S.scales, seg(g, 10.7, 10.95) * (1 - seg(g, 11.55, 11.75)));
+    S.marks.forEach((m, i) => { const t = markT[i](g); setT(m.g, t.x, t.y, Math.max(t.s, 0.001)); setO(m.g, t.o); });
+
+    /* --- testing sequence --- */
+    const us = USERS.map((u, k) => clamp((g - SEQ0 - k * SLOT) / SLOT));
+    const done = us.map(u => seg(u, 0.9, 1));
+    let active = -1;
+    const sceneIn = seg(g, 11.9, 12.05) * (1 - seg(g, 12.86, 12.96));
+    S.queue.forEach((p, j) => {
+      const qx = L.queue.x, qyy = qy(j);
+      const u = us[j], a = seg(u, 0, 0.3), f = seg(u, 0.75, 0.95);
+      // approach the app, then return to the queue slot
+      const x = lerp(lerp(qx, L.stand.x, a), qx, f), y = lerp(lerp(qyy, L.stand.y, a), qyy, f);
+      const born = seg(g, 11.82, 12.0);
+      setT(p, x, y, lerp(0.4, 1, born)); setO(p, born * lerp(1, 0.4, done[j]) * (1 - seg(g, 12.86, 12.96)));
+      setO(S.queueMeta[j].g, sceneIn); reveal(S.queueMeta[j].check, done[j]);
+      if (u > 0 && u < 1) active = j;
+    });
+    setO(S.queueLabel, sceneIn); setO(S.sessionLabel, sceneIn);
+    const nDone = Math.round(done.reduce((a, b) => a + b, 0));
+    S.sessionCount.textContent = nDone + ' of 6 sessions'; setO(S.sessionCount, sceneIn * seg(g, SEQ0 + SLOT * 0.8, SEQ0 + SLOT * 0.95));
+    setT(S.queueMore, 0, qy(6) - 6); setO(S.queueMore, sceneIn);
+    if (active >= 0) {
+      const u = us[active];
+      const so = seg(u, 0.3, 0.4) * (1 - seg(u, 0.8, 0.9));
+      if (speechUser !== active) {
+        speechUser = active;
+        while (S.speechText.firstChild) S.speechText.removeChild(S.speechText.firstChild);
+        const words = USERS[active].req.split(' '); const lines = []; let cur = '';
+        const mc = L.mobile ? 26 : 44;
+        for (const w of words) { if ((cur + ' ' + w).trim().length > mc && cur) { lines.push(cur); cur = w; } else cur = (cur + ' ' + w).trim(); }
+        if (cur) lines.push(cur);
+        lines.forEach((l, i) => el('tspan', { x: 0, dy: i ? 16 * L.fs : 0, text: l }, S.speechText));
+        S.speechTitle.textContent = 'User 0' + (active + 1) + ' · Eight dimensions combined';
+        S.setSpeechHeight(lines.length * 16 * L.fs);
+        S.traitRows.forEach((r, di) => {
+          const v = USERS[active].traits[di];
+          r.dot.setAttribute('cx', r.x + (v ? 26 : 0)); r.dot.setAttribute('fill', PALETTE[active]);
+          r.t.textContent = traitName(di, v);
+        });
+      }
+      setT(S.speech, L.app12.x, L.app12.y - 105 * L.app12.s - S.speechH - 34 - 4 * (1 - so)); setO(S.speech, so);
+      setO(S.traits, seg(u, 0.32, 0.45) * (1 - seg(u, 0.8, 0.9)));
+      // arrows: user → app while interacting, app → session paper while the record is produced
+      const ax0 = L.stand.x + 16, ax1 = L.app12.x - 150 * L.app12.s - 6;
+      S.arrowUser.setAttribute('d', `M${ax0} ${L.stand.y - 4} L${ax1} ${L.app12.y - 4}`);
+      reveal(S.arrowUser, seg(u, 0.3, 0.42)); setO(S.arrowUser, seg(u, 0.3, 0.34) * (1 - seg(u, 0.72, 0.8)));
+      const stA = stackT(g), fpA = seg(u, 0.5, 0.75);
+      const px = lerp(L.app12.x + 150 * L.app12.s, stA.x + (-22 + active * 3) * stA.s, fpA) - 2;
+      const py = lerp(L.app12.y - 28, stA.y + (-28 - active * 5) * stA.s, fpA) + 28 * lerp(0.5, 1, fpA);
+      S.arrowPaper.setAttribute('d', curve(L.app12.x + 150 * L.app12.s + 4, L.app12.y + 6, px, py, -0.12));
+      reveal(S.arrowPaper, seg(u, 0.48, 0.6)); setO(S.arrowPaper, seg(u, 0.48, 0.52) * (1 - seg(u, 0.76, 0.84)));
+    } else { setO(S.speech, 0); setO(S.traits, 0); setO(S.arrowUser, 0); setO(S.arrowPaper, 0); }
+
+    /* --- session papers & stack --- */
+    const st = stackT(g);
+    S.papers.forEach((p, k) => {
+      const u = us[k], fp = seg(u, 0.5, 0.75);
+      const tx = st.x + (-22 + k * 3) * st.s, ty = st.y + (-28 - k * 5) * st.s;
+      const sx = L.app12.x + 150 * L.app12.s, sy = L.app12.y - 28;
+      let o = u > 0.55 ? fp : 0;
+      setT(p, lerp(sx, tx, fp), lerp(sy, ty, fp), lerp(0.5, 1, fp) * st.s); setO(p, o * st.o);
+    });
+    const pa = pageAT(g), pb = pageBT(g);
+    setT(S.pageA.g, pa.x, pa.y, pa.s); setO(S.pageA.g, pa.o);
+    setT(S.pageB.g, pb.x, pb.y, pb.s); setO(S.pageB.g, pb.o);
+    setO(S.pageA.content, seg(g, 13.08, 13.22) * (1 - seg(g, 13.74, 13.86)));
+
+    /* --- evaluation --- */
+    const gl = L.glass, glassIn = seg(g, 13.85, 14.05), glassOut = 1 - seg(g, 14.55, 14.7);
+    setT(S.glass, gl.x, gl.y, lerp(0.7, 1, glassIn)); setO(S.glass, glassIn * glassOut);
+    const linkO = seg(g, 14.0, 14.2) * (1 - seg(g, 14.55, 14.68));
+    setO(S.evalLinks, linkO); setO(S.evalLabels, glassIn * glassOut);
+    const cards = findT.map(t => t(g));
+    S.evalPaths.forEach((path, i) => {
+      let d;
+      if (i === 0) d = curve(L.stack14.x + 30 * L.stack14.s, L.stack14.y, gl.x - 46, gl.y, -0.15);
+      else { const c = cards[i - 1]; d = curve(gl.x + 46, gl.y + 4, F.x, c.y + c.h / 2, [-0.18, -0.06, 0.06, 0.18][i - 1]); }
+      path.setAttribute('d', d); reveal(path, seg(g, 13.95 + i * 0.03, 14.3 + i * 0.03));
+    });
+    ctx.arrowsActive = g > 13.9 && g < 14.7;
+    cards.forEach((c, i) => {
+      const f = S.findings[i];
+      const cache = findRectCache[i];
+      if (Math.abs(cache.w - c.w) > 0.5 || Math.abs(cache.h - c.h) > 0.5) { cache.w = c.w; cache.h = c.h; f.rect.setAttribute('d', roughRect(0, 0, c.w, c.h, f.seed, 0.9)); }
+      setT(f.g, c.x, c.y); setO(f.g, c.o);
+      f.dot.setAttribute('cx', 16); f.dot.setAttribute('cy', c.h / 2);
+      const two = L.mobile; f.t1.setAttribute('x', 30); f.t1.setAttribute('y', two ? 22 : c.h / 2 - 3); f.t2.setAttribute('x', 30); f.t2.setAttribute('y', two ? 42 : c.h / 2 + 13); Array.from(f.t2.childNodes).forEach(ts => ts.setAttribute('x', 30));
+      f.t3.setAttribute('x', 30); f.t3.setAttribute('y', c.h / 2 + 5);
+      setO(f.fText, 1 - seg(g, 14.6, 14.75)); setO(f.rText, seg(g, 14.8, 14.95));
+    });
+
+    /* --- report & PM --- */
+    setO(S.report, seg(g, 14.62, 14.85)); reveal(S.reportOutline, seg(g, 14.62, 14.95));
+    setO(S.reportText, seg(g, 14.85, 15.05)); setO(S.reportReady, seg(g, 15.0, 15.15));
+    S.pmArrow.setAttribute('d', curve(R.x + R.w + 8, R.y + R.h * 0.55, L.pm.x - 44 * (L.pm.s / 2.6), L.pm.y, 0.12));
+    reveal(S.pmArrow, seg(g, 15.05, 15.25)); setO(S.pmArrow, seg(g, 15.05, 15.1));
+    const pmIn = seg(g, 15.1, 15.3);
+    setT(S.pm, L.pm.x, L.pm.y, lerp(0.7, 1, pmIn)); setO(S.pm, pmIn);
+  }
+
+  // autonomous arrowheads along the evaluation lines (time-driven)
+  function tickArrows(now) {
+    S.evalPaths.forEach((path, i) => {
+      const len = path.getTotalLength(); if (!len) return;
+      const t = reduceMotion ? 0.5 : ((now / 2600 + i * 0.2) % 1);
+      const p = path.getPointAtLength(len * t), p2 = path.getPointAtLength(Math.min(len, len * t + 1));
+      const ang = Math.atan2(p2.y - p.y, p2.x - p.x) * 180 / Math.PI;
+      const head = S.arrowheads[i];
+      head.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${ang.toFixed(1)})`);
+      head.setAttribute('opacity', reduceMotion ? 0.8 : Math.sin(t * Math.PI) * 0.95);
+    });
+  }
+  return { render, tickArrows };
+}
+
+/* ---------- hero illustration ---------- */
+function buildHero(svg) {
+  const defs = el('defs', {}, svg);
+  const pat = el('pattern', { id: 'hatch-hero', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' }, defs);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: C.text, 'stroke-width': 0.7, opacity: 0.16 }, pat);
+  const links = el('g', {}, svg), front = el('g', {}, svg);
+  // small app window
+  const app = el('g', { transform: 'translate(28 165)' }, front);
+  el('path', { d: roughRect(0, 0, 160, 112, 11, 1), fill: C.paper, ...PEN, opacity: 1 }, app);
+  el('path', { d: 'M1 22 L159 22.5', ...PEN, 'stroke-width': 1 }, app);
+  [10, 19, 28].forEach((x, i) => el('circle', { cx: x, cy: 11, r: 2.5, fill: [C.terracotta, C.gold, C.sage][i], opacity: 0.8 }, app));
+  text(app, 38, 15, 'Sales Command Center', { 'font-size': 9.5, 'font-weight': 600, fill: C.text2 });
+  [0, 1, 2].forEach(i => {
+    const y = 42 + i * 22;
+    el('path', { d: roughRect(12, y - 8, 10, 10, 12 + i, 0.5), fill: [C.teal, C.gold, C.sage][i], opacity: 0.8 }, app);
+    el('path', { d: `M30 ${y - 3} L${80 + i * 18} ${y - 2.5}`, ...PEN, 'stroke-width': 1.2, opacity: 0.5 }, app);
+  });
+  // ~20 people fanned out to the right
+  const r = rng(42);
+  for (let i = 0; i < 20; i++) {
+    const col = i % 4, row = Math.floor(i / 4);
+    const x = 262 + col * 70 + (r() - 0.5) * 26, y = 40 + row * 88 + (r() - 0.5) * 30;
+    const color = PALETTE[i % 6];
+    const line = el('path', { d: curve(188, 221, x - 14, y + 4, (r() - 0.5) * 0.5), stroke: color, 'stroke-width': 1.2, fill: 'none', 'stroke-linecap': 'round', opacity: 0.7, class: 'hero-line' }, links);
+    line.style.animationDelay = (0.1 + i * 0.05) + 's';
+    const p = person(front, color, 900 + i, 0.95 + r() * 0.35);
+    setT(p, x, y, 1, (r() - 0.5) * 12);
+    p.setAttribute('class', 'hero-person'); p.style.animationDelay = (0.7 + i * 0.05) + 's';
+  }
+}
+
+/* ---------- environment panel ---------- */
+function setupEnvPanel(onChange) {
+  const form = document.getElementById('envForm');
+  const sel = document.getElementById('viewportSelect');
+  const summary = document.getElementById('envSummary');
+  const sketch = document.getElementById('deviceSketch');
+  const VP = { Desktop: ['1920x1080', '1440x900', '1024x768'], Mobile: ['390x844', '430x932', '360x800'] };
+  function fillViewports(device) {
+    sel.innerHTML = '';
+    VP[device].forEach((v, i) => { const o = document.createElement('option'); o.value = v; o.textContent = v + (i === 0 ? ' — default' : ''); sel.appendChild(o); });
+  }
+  function drawSketch(device) {
+    sketch.innerHTML = '';
+    if (device === 'Desktop') {
+      el('path', { d: roughRect(14, 10, 92, 56, 5, 0.8), fill: C.paper, ...PEN }, sketch);
+      el('path', { d: 'M46 78 L74 78 M60 66 L60 78', ...PEN }, sketch);
+      el('path', { d: roughRect(24, 20, 40, 8, 6, 0.5), fill: C.teal, opacity: 0.6 }, sketch);
+      el('path', { d: 'M24 38 L90 38 M24 48 L78 48', ...PEN, 'stroke-width': 1, opacity: 0.5 }, sketch);
+    } else {
+      el('path', { d: roughRect(42, 6, 36, 76, 7, 0.8), fill: C.paper, ...PEN }, sketch);
+      el('path', { d: 'M54 12 L66 12', ...PEN, 'stroke-width': 1 }, sketch);
+      el('path', { d: roughRect(48, 20, 24, 8, 8, 0.5), fill: C.teal, opacity: 0.6 }, sketch);
+      el('path', { d: 'M48 36 L72 36 M48 44 L66 44 M48 52 L72 52', ...PEN, 'stroke-width': 1, opacity: 0.5 }, sketch);
+    }
+  }
+  let lastDevice = null;
+  function read() {
+    const fd = new FormData(form);
+    const device = fd.get('device') || 'Desktop';
+    if (device !== lastDevice) { fillViewports(device); drawSketch(device); lastDevice = device; }
+    const a11y = fd.getAll('a11y');
+    const state = { interaction: fd.get('interaction') || 'Both', a11y, device, viewport: sel.value || VP[device][0] };
+    summary.textContent = `${state.interaction} · ${a11y.length ? a11y.join(', ') : 'No accessibility needs'} · ${state.device} ${state.viewport.replace('x', '×')}`;
+    const lines = [state.interaction, a11y.length ? a11y.join(', ') : 'No accessibility needs', `${state.device} · ${state.viewport.replace('x', '×')}`];
+    onChange(lines);
+  }
+  form.addEventListener('change', read);
+  form.addEventListener('submit', e => e.preventDefault());
+  read();
+}
+
+/* ---------- boot ---------- */
+function init() {
+  buildHero(document.getElementById('heroSvg'));
+
+  const stage = document.getElementById('stage');
+  const svg = document.getElementById('stageSvg');
+  const desc = document.getElementById('stageDesc');
+  const heading = document.getElementById('stageHeading');
+  const hLabel = document.getElementById('stageLabel'), hTitle = document.getElementById('stageTitle');
+  const envPanel = document.getElementById('envPanel');
+  const envSlot = document.getElementById('envSlotMobile');
+  const progressBar = document.getElementById('progressBar');
+  const steps = Array.from(document.querySelectorAll('.step'));
+  const cards = steps.map(s => s.querySelector('.card'));
+  const dots = document.getElementById('dots');
+  const mq = window.matchMedia('(max-width: 860px)');
+
+  let L, S, R, envLines = ['Both', 'No accessibility needs', 'Desktop · 1920×1080'];
+  const ctx = { checkProgress: 0, arrowsActive: false, envPanel: () => {} };
+  let g = 1, lastG = -1, activeChapter = 0, headingKey = null, checkStart = null, checkRunning = false, map = { s: 1, ox: 0, oy: 0 };
+
+  function computeMap() {
+    const rect = stage.getBoundingClientRect();
+    const s = Math.min(rect.width / L.W, rect.height / L.H);
+    map = { s, ox: (rect.width - L.W * s) / 2, oy: (rect.height - L.H * s) / 2, w: rect.width, h: rect.height };
+    heading.style.setProperty('--scales-left', (map.ox + L.scales.x0 * s) + 'px');
+    heading.style.top = L.mobile ? '12px' : Math.max(24, map.oy + 40 * s) + 'px';
+    applyHeadingAlign();
+  }
+  function build() {
+    L = makeLayout(mq.matches);
+    S = buildScene(svg, L);
+    S.setEnvNotes(envLines);
+    R = makeRenderer(S, L, ctx);
+    if (L.mobile) { envSlot.appendChild(envPanel); envPanel.classList.remove('in-stage'); envPanel.classList.add('is-on'); envPanel.setAttribute('aria-hidden', 'false'); envPanel.style.transform = ''; envPanel.style.opacity = ''; }
+    else { stage.appendChild(envPanel); envPanel.classList.add('in-stage'); }
+    computeMap();
+    lastG = -1; headingKey = null;
+  }
+  ctx.envPanel = (gg, sh) => {
+    if (L.mobile) return;
+    const on = gg >= 6.6 && gg < 7.75;
+    envPanel.classList.toggle('is-on', on);
+    envPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
+    const a = seg(gg, 7.55, 7.75);
+    if (a > 0 && on) {
+      const px = map.ox + sh.x * map.s, py = map.oy + sh.y * map.s;
+      const dx = px - envPanel.offsetLeft, dy = py - envPanel.offsetTop;
+      envPanel.style.transform = `translate(${(dx * a).toFixed(1)}px, ${(dy * a).toFixed(1)}px) scale(${(1 - 0.85 * a).toFixed(3)})`;
+      envPanel.style.opacity = (1 - a).toFixed(3);
+    } else { envPanel.style.transform = ''; envPanel.style.opacity = ''; }
+  };
+
+  // chapter dots
+  for (let n = 1; n <= 15; n++) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('aria-label', 'Chapter ' + String(n).padStart(2, '0'));
+    b.addEventListener('click', () => { document.getElementById('ch-' + n).scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' }); });
+    dots.appendChild(b);
+  }
+  const dotButtons = Array.from(dots.children);
+
+  function applyHeadingAlign() {
+    const left = headingKey && headingKey[0] === 10.55 && !L.mobile; // scales scene: left-align with the scales
+    heading.classList.toggle('is-left', !!left);
+    heading.style.left = left ? heading.style.getPropertyValue('--scales-left') : '';
+  }
+  function updateHeading(gg) {
+    let key = HEADINGS[0];
+    for (const h of HEADINGS) if (gg >= h[0]) key = h;
+    if (key === headingKey) return;
+    headingKey = key;
+    applyHeadingAlign();
+    if (!key[1]) { heading.classList.add('is-hidden'); return; }
+    heading.classList.add('is-hidden');
+    setTimeout(() => { if (headingKey !== key) return; hLabel.textContent = key[1]; hTitle.textContent = key[2]; heading.classList.remove('is-hidden'); }, reduceMotion ? 0 : 180);
+  }
+  function setActiveChapter(n) {
+    if (n === activeChapter) return;
+    activeChapter = n;
+    dotButtons.forEach((b, i) => b.setAttribute('aria-current', i + 1 === n ? 'true' : 'false'));
+    cards.forEach((c, i) => c.classList.toggle('is-dim', n > 0 && i + 1 !== n));
+    if (n >= 1) desc.textContent = DESCRIPTIONS[n] || '';
+    if (n === 1) { // replay the product checks whenever we (re)enter chapter 1
+      if (reduceMotion) { ctx.checkProgress = 1; lastG = -1; }
+      else { checkStart = performance.now(); checkRunning = true; ctx.checkProgress = 0; }
+    }
+  }
+  function computeG() {
+    const vh = window.innerHeight;
+    const pinTop = vh * (L.mobile ? 0.6 : 0.26);
+    let sum = 0, act = 0;
+    steps.forEach((step, i) => {
+      const r = step.getBoundingClientRect();
+      const f = clamp((pinTop - r.top) / r.height);
+      sum += f;
+      if (f > 0) act = i + 1;
+      if (i === 0 && r.top > vh * 0.98) act = 0;
+    });
+    // chapter n+1 becomes active as its card slides in
+    const gg = 1 + sum;
+    const nextAct = Math.min(15, Math.floor(gg + 0.4));
+    if (act > 0) act = Math.max(act, nextAct);
+    return { g: clamp(gg, 1, 15.6), act };
+  }
+  function frame(now) {
+    const { g: gg, act } = computeG();
+    g = gg;
+    let dirty = false;
+    if (checkRunning) {
+      ctx.checkProgress = clamp((now - checkStart) / 2400);
+      if (ctx.checkProgress >= 1) checkRunning = false;
+      dirty = true;
+    }
+    setActiveChapter(act);
+    if (g !== lastG || dirty) {
+      R.render(g); updateHeading(g);
+      lastG = g;
+      const doc = document.documentElement;
+      progressBar.style.width = (100 * clamp(window.scrollY / (doc.scrollHeight - window.innerHeight))).toFixed(2) + '%';
+    }
+    if (ctx.arrowsActive) R.tickArrows(now);
+    requestAnimationFrame(frame);
+  }
+
+  setupEnvPanel(lines => { envLines = lines; if (S) { S.setEnvNotes(lines); lastG = -1; } });
+  build();
+  window.addEventListener('resize', () => { computeMap(); lastG = -1; });
+  mq.addEventListener('change', build);
+  requestAnimationFrame(frame);
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
