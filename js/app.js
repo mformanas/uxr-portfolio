@@ -203,11 +203,11 @@ const DIMS = [
 // six complete personalities, 1 = right pole of each dimension
 const USERS = [
   { traits: [1, 0, 1, 1, 0, 1, 0, 1], req: 'Show the source and risks. Then I’ll compare the options.' },
-  { traits: [1, 1, 0, 0, 0, 1, 1, 0], req: 'Top opportunity. Next step. I’m ready to act.' },
-  { traits: [0, 0, 1, 1, 0, 1, 0, 1], req: 'Let’s work through the deal history, risks, and evidence before I decide.' },
+  { traits: [1, 1, 0, 0, 0, 1, 1, 0], req: 'Top priority. Next step. I’m ready to act.' },
+  { traits: [0, 0, 1, 1, 0, 1, 0, 1], req: 'Let’s work through the history, risks, and evidence before I decide.' },
   { traits: [0, 0, 1, 1, 1, 0, 0, 1], req: 'Explain the recommendation and help me check it is safe.' },
   { traits: [1, 1, 1, 0, 0, 1, 1, 1], req: 'Show the key signals. I can take it from there.' },
-  { traits: [1, 1, 1, 1, 1, 0, 1, 0], req: 'Which deal, and why? Keep it simple. I’m short on time.' }
+  { traits: [1, 1, 1, 1, 1, 0, 1, 0], req: 'Which item, and why? Keep it simple. I’m short on time.' }
 ];
 // deterministic jitter so six marks on one scale don't overlap
 const MARK_POS = USERS.map((u, ui) => u.traits.map((v, di) => {
@@ -217,13 +217,13 @@ const MARK_POS = USERS.map((u, ui) => u.traits.map((v, di) => {
 const traitName = (di, v) => DIMS[di][v ? 2 : 1];
 
 const GLIMPSE_A = [
-  { idx: 2, label: 'Concise', quote: 'Top opportunity. Next step?' },
-  { idx: 20, label: 'Verbose', quote: 'Here’s my pipeline context. Let’s work through the options.' },
+  { idx: 2, label: 'Concise', quote: 'Top priority. Next step?' },
+  { idx: 20, label: 'Verbose', quote: 'Here’s my full context. Let’s work through the options.' },
   { idx: 40, label: 'Verifying', quote: 'What makes this a priority? Show me the source.' },
   { idx: 58, label: 'Trusting', quote: 'I’ll start with your recommendation.' }
 ];
 const GLIMPSE_B = [
-  { idx: 9, label: 'Reads deeply', quote: 'Let me read the deal history, risks, and next steps.' },
+  { idx: 9, label: 'Reads deeply', quote: 'Let me read the history, risks, and next steps.' },
   { idx: 25, label: 'Skims', quote: 'Just show me the most important signals.' },
   { idx: 43, label: 'High tolerance', quote: 'That’s incomplete. Let’s try another question.' },
   { idx: 63, label: 'Low tolerance', quote: 'This is taking too long. I’ll find a quicker way.' }
@@ -237,12 +237,12 @@ const FINDINGS = [
 const REPORT_ROWS = ['Prioritized issues', 'Session evidence', 'Affected user profiles', 'Conversation transcripts'];
 
 const HEADINGS = [
-  [1.0, 'The product', 'Sales Command Center'],
+  [1.0, 'The product', 'An agentic app'],
   [1.55, '', ''],
   [2.65, 'Meet Shakti', 'Synthetic human orchestration'],
   [3.55, 'Synthetic user orchestration', 'Three inputs.'],
   [4.55, 'The user role', 'Start with the person behind the role'],
-  [5.55, 'The shared purpose', 'Provide business outcomes for the sales reps'],
+  [5.55, 'The shared purpose', 'Provide the business outcome for the role'],
   [6.55, 'The environment', 'Select the environment variables'],
   [7.5, 'Bring the inputs together', 'Shakti absorbs the three inputs'],
   [7.95, 'The synthetic cohort', 'Shakti creates whole spectrum of synthetic users'],
@@ -255,18 +255,18 @@ const HEADINGS = [
   [14.55, 'The PM’s report', 'Evidence to improve the experience']
 ];
 const DESCRIPTIONS = {
-  1: 'A sketched Sales Command Center app window. Three tests below it — agentic workflows, functionality, correct data sources — each receive a checkmark and a handwritten “Passed”.',
-  2: 'The app shrinks to the centre. Curved lines lead to four people asking: Is this data correct? Why this deal? Too much to read. Can I use the keyboard? A question mark sits beneath the app.',
+  1: 'A sketched agentic app window. Three tests below it — agentic workflows, functionality, correct data sources — each receive a checkmark and a handwritten “Passed”.',
+  2: 'The app shrinks to the centre. Curved lines lead to four people asking: Is this data correct? Why this recommendation? Too much to read. Can I use the keyboard? A question mark sits beneath the app.',
   3: 'The Shakti mark: four muted coloured squares inside a pale teal sketched square, with the expanded name Synthetic Human Agent for Knowledge, Testing and Insight.',
   4: 'Shakti sits at the lower left. Three inputs across the top — user role, business outcome, environment — connect to it with curved pencil lines.',
-  5: 'A pencil writes “Sales rep” above the user role input.',
+  5: 'A pencil writes “Ops analyst” above the user role input.',
   6: 'A pencil writes Identify, Prioritize and Get context above the business outcome input.',
   7: 'A pencil writes the chosen environment options beside the environment input. A transparent panel lets you choose an example test environment.',
   8: 'Shakti absorbs the three inputs, then expands into a grid of 72 small coloured people with slight natural variation.',
   9: 'Most people fade. Four remain in place: Concise, Verbose, Verifying and Trusting, each with a short quote.',
   10: 'A different four people remain: Reads deeply, Skims, High tolerance and Low tolerance, each with a short quote.',
   11: 'Eight horizontal pencil scales, one per personality dimension, each with six coloured marks. Each colour is one complete synthetic personality.',
-  12: 'The marks gather into six people queued beside the app. One at a time, a user approaches Sales Command Center, makes a request, and a session record joins a stack of papers.',
+  12: 'The marks gather into six people queued beside the app. One at a time, a user approaches the agentic app, makes a request, and a session record joins a stack of papers.',
   13: 'The top session paper opens into two pages: Conversations (prompts, AI responses, follow-up questions) and Outcomes (goal completion, time and effort, moments of friction). Both stay linked to the user and environment.',
   14: 'A record stack on the left, a teal magnifying glass in the middle evaluating task outcome, interaction experience and AI responses, and finding cards on the right: source visibility, information overload, keyboard barrier, and more findings.',
   15: 'The finding cards become rows of an illustrative experience report — prioritized issues, session evidence, affected user profiles, conversation transcripts — marked Ready for review, with a pencil arrow to the product manager.'
@@ -331,9 +331,9 @@ function buildScene(svg, L) {
     el('path', { d: roughRect(0, 0, APP_W, APP_H, 21, 1.1), fill: C.paper, ...PEN, opacity: 1 }, g);
     el('path', { d: `M1 27 L${APP_W - 1} 27.5`, ...PEN, 'stroke-width': 1 }, g);
     [12, 22, 32].forEach((x, i) => el('circle', { cx: x, cy: 14, r: 3, fill: [C.terracotta, C.gold, C.sage][i], opacity: 0.8 }, g));
-    T(g, 46, 18.5, 'Sales Command Center', { 'font-size': 11.5, 'font-weight': 600, fill: C.text2 });
-    T(g, 16, 54, 'Your opportunities, in focus', { 'font-size': 14.5, 'font-weight': 600 });
-    const rows = ['Priority opportunities', 'Deal context & signals', 'Recommended next steps'];
+    T(g, 46, 18.5, 'Agentic app', { 'font-size': 11.5, 'font-weight': 600, fill: C.text2 });
+    T(g, 16, 54, 'Your work, in focus', { 'font-size': 14.5, 'font-weight': 600 });
+    const rows = ['Priority items', 'Context & signals', 'Recommended next steps'];
     const cols = [C.teal, C.gold, C.sage];
     rows.forEach((r, i) => {
       const y = 84 + i * 34;
@@ -365,7 +365,7 @@ function buildScene(svg, L) {
   /* --- human question scene --- */
   S.q = el('g', {}, layers.front);
   S.qLinks = el('g', {}, layers.links);
-  const Q = ['Is this data correct?', 'Why this deal?', 'Too much to read.', 'Can I use the keyboard?'];
+  const Q = ['Is this data correct?', 'Why this recommendation?', 'Too much to read.', 'Can I use the keyboard?'];
   S.qPeople = L.qPeople.map(([x, y], i) => {
     const p = person(S.q, PALETTE[i], 100 + i, 1.5);
     setT(p, x, y);
@@ -405,7 +405,7 @@ function buildScene(svg, L) {
     T(inner, 0, 44, label, { 'font-size': 12.5, 'text-anchor': 'middle', fill: C.text2 });
     return { g, inner };
   });
-  S.noteRole = handwriting(S.inputs[0].inner, -40, -44, 'Sales rep', { 'font-size': 20 * FS }, 'clip-role');
+  S.noteRole = handwriting(S.inputs[0].inner, -40, -44, 'Ops analyst', { 'font-size': 20 * FS }, 'clip-role');
   S.noteOutcome = ['Identify', 'Prioritize', 'Get context'].map((s, i) =>
     handwriting(S.inputs[1].inner, -36, -84 + i * 22, s, { 'font-size': 18 * FS }, 'clip-outcome-' + i));
   S.envNotes = el('g', {}, S.inputs[2].inner);
@@ -563,7 +563,7 @@ function buildScene(svg, L) {
     S.reportText = el('g', {}, g);
     T(S.reportText, R.x + 24, R.y + 34, 'ILLUSTRATIVE REPORT', { class: 'ink-label', 'font-size': 11 });
     T(S.reportText, R.x + 24, R.y + 64, 'Experience report', { 'font-size': 20, 'font-weight': 500 });
-    T(S.reportText, R.x + 24, R.y + 86, 'Sales Command Center', { 'font-size': 13.5, fill: C.text2 });
+    T(S.reportText, R.x + 24, R.y + 86, 'Agentic app', { 'font-size': 13.5, fill: C.text2 });
     S.reportReady = el('g', {}, g);
     el('path', { d: roughCircle(R.x + 34, R.y + R.h - 34, 9, 901), fill: C.sage, opacity: 0.85 }, S.reportReady);
     el('path', { d: `M${R.x + 30} ${R.y + R.h - 34} L${R.x + 33} ${R.y + R.h - 30} L${R.x + 39} ${R.y + R.h - 39}`, stroke: C.paper, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }, S.reportReady);
@@ -595,7 +595,7 @@ function makeRenderer(S, L, ctx) {
   const shaktiT = track([
     [2.7, { x: L.shakti3.x, y: L.shakti3.y, s: L.shakti3.s, o: 0 }], [2.95, { o: 1 }],
     [3.55, { x: L.shakti3.x, y: L.shakti3.y, s: L.shakti3.s }], [3.95, { x: L.shakti4.x, y: L.shakti4.y, s: L.shakti4.s }],
-    [7.8, { x: L.shakti4.x, y: L.shakti4.y, s: L.shakti4.s }], [8.05, { x: center.x, y: center.y, s: L.shakti4.s }],
+    [7.8, { x: L.shakti4.x, y: L.shakti4.y, s: L.shakti4.s }],
     [8.02, { o: 1 }], [8.28, { o: 0 }]
   ]);
   const inputT = L.inputs.map(([x, y], i) => track([
@@ -827,7 +827,7 @@ function buildHero(svg) {
   el('path', { d: roughRect(0, 0, 160, 112, 11, 1), fill: C.paper, ...PEN, opacity: 1 }, app);
   el('path', { d: 'M1 22 L159 22.5', ...PEN, 'stroke-width': 1 }, app);
   [10, 19, 28].forEach((x, i) => el('circle', { cx: x, cy: 11, r: 2.5, fill: [C.terracotta, C.gold, C.sage][i], opacity: 0.8 }, app));
-  text(app, 38, 15, 'Sales Command Center', { 'font-size': 9.5, 'font-weight': 600, fill: C.text2 });
+  text(app, 38, 15, 'Agentic app', { 'font-size': 9.5, 'font-weight': 600, fill: C.text2 });
   [0, 1, 2].forEach(i => {
     const y = 42 + i * 22;
     el('path', { d: roughRect(12, y - 8, 10, 10, 12 + i, 0.5), fill: [C.teal, C.gold, C.sage][i], opacity: 0.8 }, app);

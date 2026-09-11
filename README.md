@@ -2,7 +2,7 @@
 
 A scrollytelling website explaining how a product manager uses Shakti
 (synthetic user orchestration) to explore the human experience of an agentic
-Sales Command Center app before launch.
+agentic app before launch.
 
 ## Files
 
