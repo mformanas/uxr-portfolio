@@ -870,10 +870,12 @@ function buildScene(svg, L) {
   S.shakti = el('g', {}, layers.mid);
   {
     const g = S.shakti;
-    el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), fill: C.paleTeal, opacity: 0.9 }, g);
-    el('path', { d: roughRect(-100, -100, 200, 200, 60, 1.6), ...PEN, 'stroke-width': 1.2, opacity: 0.45 }, g);
-    const sq = [[-24, -24, C.teal], [4, -24, C.sage], [-24, 4, C.terracotta], [4, 4, C.gold]];
-    sq.forEach(([x, y, c], i) => textured(g, roughRect(x, y, 20, 20, 61 + i, 0.7), c, 70 + i, { fillOpacity: 0.75, sw: 0.9 }));
+    // imperfect outer square (hand-cut edges), four small people inside
+    const outer = roughPoly([[-100, -96], [96, -100], [100, 98], [-97, 100]], 60, true, 5);
+    el('path', { d: outer, fill: C.paleTeal, opacity: 0.9 }, g);
+    el('path', { d: outer, ...PEN, 'stroke-width': 1.2, opacity: 0.45 }, g);
+    const four = [[-42, -36, C.teal], [42, -36, C.sage], [-42, 46, C.terracotta], [42, 46, C.gold]];
+    four.forEach(([x, y, c], i) => { const p = person(g, c, 62 + i, 1.7); setT(p, x, y, 1, (i % 2 ? 1 : -1) * 5); });
     T(g, 0, 134, 'Shakti', { 'font-size': 22, 'font-weight': 600, 'text-anchor': 'middle' });
     T(g, 0, 156, 'Synthetic user orchestration', { 'font-size': 13, fill: C.text2, 'text-anchor': 'middle' });
     S.shaktiName = el('g', {}, g);
@@ -1183,7 +1185,7 @@ function makeRenderer(S, L, ctx) {
     const inA = new Set(GLIMPSE_A.map(x => x.idx)), inB = new Set(GLIMPSE_B.map(x => x.idx));
     const WASH_STEPS = S.WASH_STEPS, dimA = seg(g, 9.55, 9.8), riseB = seg(g, 9.62, 9.9), gone = seg(g, 10.55, 10.78);
     const morphT = seg(g, 10.55, 10.92), morphOut = seg(g, 10.9, 10.97), morphIn = seg(g, 10.55, 10.75);
-    const SQ = [[-14, -14], [14, -14], [-14, 14], [14, 14]]; // the four small squares of the Shakti mark
+    const SQ = [[-42, -36], [42, -36], [-42, 46], [42, 46]]; // the four small people of the Shakti mark
     S.cohort.forEach((p, i) => {
       const P = S.cohortPos[i];
       const e = seg(g, 8.0 + P.delay * 2.5, 8.4 + P.delay * 2.5, easeOut);
