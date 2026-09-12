@@ -871,7 +871,24 @@ function buildScene(svg, L) {
   {
     const g = S.shakti;
     // imperfect outer square (hand-cut edges), four small people inside
-    const outer = roughPoly([[-100, -96], [96, -100], [100, 98], [-97, 100]], 60, true, 5);
+    // organic blob: a squarish rounded shape with softly varying radius
+    let outer = '';
+    { const rr = rng(60), n = 24, pts = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        // superellipse-ish base (soft square) with gentle organic variation
+        const base = 100 / Math.pow(Math.pow(Math.abs(Math.cos(a)), 3.2) + Math.pow(Math.abs(Math.sin(a)), 3.2), 1 / 3.2);
+        const rad = base * (0.93 + rr() * 0.1) * (1 + 0.04 * Math.sin(a * 3 + 1.2));
+        pts.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+      }
+      // smooth closed curve through the points (Catmull-Rom → cubic Bézier)
+      for (let i = 0; i < n; i++) {
+        const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+        const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+        outer += (i ? '' : `M${p1[0].toFixed(1)} ${p1[1].toFixed(1)} `) + `C${c1[0].toFixed(1)} ${c1[1].toFixed(1)} ${c2[0].toFixed(1)} ${c2[1].toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)} `;
+      }
+      outer += 'Z';
+    }
     el('path', { d: outer, fill: C.paleTeal, opacity: 0.9 }, g);
     el('path', { d: outer, ...PEN, 'stroke-width': 1.2, opacity: 0.45 }, g);
     const four = [[-42, -36, C.teal], [42, -36, C.sage], [-42, 46, C.terracotta], [42, 46, C.gold]];
