@@ -541,7 +541,14 @@ function roughPoly(pts, seed, closed = true, amt = 1.2) {
   }
   return d + (closed ? 'Z' : '');
 }
-const roughRect = (x, y, w, h, seed, amt) => roughPoly([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], seed, true, amt);
+// rounded, lightly wobbly rectangle
+function roughRect(x, y, w, h, seed, amt = 1.2, radius) {
+  const r = radius ?? Math.min(10, w * 0.12, h * 0.12);
+  const rr = rng(seed); const j = () => (rr() - 0.5) * 2 * amt * JITTER;
+  const P = (px, py) => `${(px + j()).toFixed(1)} ${(py + j()).toFixed(1)}`;
+  return `M${P(x + r, y)} L${P(x + w - r, y)} Q${x + w} ${y} ${P(x + w, y + r)} L${P(x + w, y + h - r)} Q${x + w} ${y + h} ${P(x + w - r, y + h)} ` +
+    `L${P(x + r, y + h)} Q${x} ${y + h} ${P(x, y + h - r)} L${P(x, y + r)} Q${x} ${y} ${P(x + r, y)} Z`;
+}
 function roughCircle(cx, cy, r, seed) {
   const rr = rng(seed); let d = '';
   const n = 8;
@@ -760,7 +767,7 @@ function makeLayout(mobile) {
     queue: { x: 120, y0: 190, dy: 48 }, app12: { x: 530, y: 320, s: 0.72 }, stand: { x: 360, y: 320 },
     traits: { y: 440, cx: [400, 560] }, stack12: { x: 850, y: 300 },
     stack13: { x: 150, y: 560, s: 0.8 }, pages: [[370, 370], [630, 370]], pageS: 1,
-    stack14: { x: 160, y: 380, s: 1 }, glass: { x: 450, y: 310 }, findings: { x: 690, w: 250, h: 60, y0: 180, dy: 86 },
+    stack14: { x: 160, y: 380, s: 1 }, glass: { x: 450, y: 310 }, findings: { x: 690, w: 250, h: 70, y0: 175, dy: 92 },
     report: { x: 270, y: 150, w: 270, h: 420 }, pm: { x: 790, y: 360, s: 2.6 }
   };
   return {
@@ -1031,7 +1038,7 @@ function buildScene(svg, L) {
     const dot = el('circle', { r: 4.5, fill: color, opacity: 0.9 }, g);
     const fText = el('g', {}, g);
     const t1 = T(fText, 0, 0, title, { 'font-size': 13, 'font-weight': 600 });
-    const t2 = TB(fText, 0, 0, desc, { 'font-size': 12, fill: C.text2 }, L.mobile ? 26 : 44);
+    const t2 = TB(fText, 0, 0, desc, { 'font-size': 12, fill: C.text2 }, L.mobile ? 26 : 32);
     const rText = el('g', {}, g);
     const t3 = T(rText, 0, 0, REPORT_ROWS[i], { 'font-size': L.mobile ? 11 : 13.5, 'font-weight': 600 });
     return { g, rect, dot, fText, rText, t1, t2, t3, seed: 850 + i };
@@ -1290,7 +1297,7 @@ function makeRenderer(S, L, ctx) {
       if (Math.abs(cache.w - c.w) > 0.5 || Math.abs(cache.h - c.h) > 0.5) { cache.w = c.w; cache.h = c.h; f.rect.setAttribute('d', roughRect(0, 0, c.w, c.h, f.seed, 0.9)); }
       setT(f.g, c.x, c.y); setO(f.g, c.o);
       f.dot.setAttribute('cx', 16); f.dot.setAttribute('cy', c.h / 2);
-      const two = L.mobile; f.t1.setAttribute('x', 30); f.t1.setAttribute('y', two ? 22 : c.h / 2 - 3); f.t2.setAttribute('x', 30); f.t2.setAttribute('y', two ? 42 : c.h / 2 + 13); Array.from(f.t2.childNodes).forEach(ts => ts.setAttribute('x', 30));
+      const two = true; f.t1.setAttribute('x', 30); f.t1.setAttribute('y', two ? 22 : c.h / 2 - 3); f.t2.setAttribute('x', 30); f.t2.setAttribute('y', two ? 42 : c.h / 2 + 13); Array.from(f.t2.childNodes).forEach(ts => ts.setAttribute('x', 30));
       f.t3.setAttribute('x', 30); f.t3.setAttribute('y', c.h / 2 + 5);
       setO(f.fText, 1 - seg(g, 14.6, 14.75)); setO(f.rText, seg(g, 14.8, 14.95));
     });
